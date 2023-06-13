@@ -9,11 +9,12 @@ from database import DataBaseConnector
 import bcrypt
 import os
 import jwt
+import json
 
 from dotenv import load_dotenv
 load_dotenv()
 
-# HASH_KEY = os.environ.get('HASH_KEY').encode('utf-8')
+HASH_KEY = b'$2b$12$CumHA1Oq0YMqeUzUV/Z9UO'
 JWT_KEY = os.environ.get('JWT_TOKEN_KEY')
 
 app = FastAPI()
@@ -32,18 +33,17 @@ database = connection.db
 
 @app.post('/signup')
 async def signup(user: User):
-    doc_ref = database.collection('users').document(user.login)
-    # hashing password
-    encoded_pass = user.password.encode('utf-8')
-    hashed_pass = bcrypt.hashpw(encoded_pass, bcrypt.gensalt())
-
     try:
-        await doc_ref.set({
+        doc_ref = database.collection('users').document(user.login)
+        # hashing password
+        encoded_pass = user.password.encode('utf-8')
+        hashed_pass = bcrypt.hashpw(encoded_pass, HASH_KEY)
+
+        doc_ref.set({
             'login': user.login,
             'email': user.email,
             'password': hashed_pass
         })
-
         return JSONResponse(content={'message': f'Successfully created user {user.login}'}, status_code=200)
     except:
         return HTTPException(detail={'message': 'Error Creating User'}, status_code=400)
@@ -57,11 +57,13 @@ async def login(user: User):
 
         if user_doc.exists:
             user_dict = user_doc.to_dict()
+            encoded_pass = user.password.encode('utf-8')
+            hashed_pass = bcrypt.hashpw(encoded_pass, HASH_KEY)
 
-            if bcrypt.checkpw(user.password, user_dict['password']):
+            if bcrypt.checkpw(hashed_pass, user_dict['password']):
                 return HTTPException(detail={'message': 'Wrong Password'}, status_code=403)
-
-            jwt_token = jwt.encode(payload=user, key=JWT_KEY)
+            
+            jwt_token = jwt.encode(payload=user.to_dict(), key=JWT_KEY)
             return JSONResponse(content={'token': jwt_token}, status_code=200)
         else:
             return HTTPException(detail={'message': 'Wrong User Login'}, status_code=403)
