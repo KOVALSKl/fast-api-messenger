@@ -13,7 +13,7 @@ import jwt
 from dotenv import load_dotenv
 load_dotenv()
 
-HASH_KEY = os.environ.get('HASH_KEY')
+# HASH_KEY = os.environ.get('HASH_KEY').encode('utf-8')
 JWT_KEY = os.environ.get('JWT_TOKEN_KEY')
 
 app = FastAPI()
@@ -32,13 +32,13 @@ database = connection.db
 
 @app.post('/signup')
 async def signup(user: User):
+    doc_ref = database.collection('users').document(user.login)
+    # hashing password
+    encoded_pass = user.password.encode('utf-8')
+    hashed_pass = bcrypt.hashpw(encoded_pass, bcrypt.gensalt())
+
     try:
-        doc_ref = database.collection('users').document(user.login)
-
-        # hashing password
-        hashed_pass = bcrypt.hashpw(user.password.encode('utf-8'), HASH_KEY)
-
-        doc_ref.set({
+        await doc_ref.set({
             'login': user.login,
             'email': user.email,
             'password': hashed_pass
@@ -57,9 +57,8 @@ async def login(user: User):
 
         if user_doc.exists:
             user_dict = user_doc.to_dict()
-            pass_hash = bcrypt.hashpw(user.password, HASH_KEY)
 
-            if user_dict['password'] != pass_hash:
+            if bcrypt.checkpw(user.password, user_dict['password']):
                 return HTTPException(detail={'message': 'Wrong Password'}, status_code=403)
 
             jwt_token = jwt.encode(payload=user, key=JWT_KEY)
