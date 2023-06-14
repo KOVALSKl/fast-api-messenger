@@ -16,7 +16,7 @@ app = FastAPI()
 @app.middleware("http")
 async def authorization_token_check(request: Request, call_next):
     response = await call_next(request)
-    token = response.headers["Authorization"].split()[1]
+    token = request.headers["Authorization"].split()[1]
 
     try:
         payload = jwt.decode(
@@ -25,6 +25,6 @@ async def authorization_token_check(request: Request, call_next):
         )
 
         jwt_token = jwt.encode(payload=payload, key=JWT_KEY)
-        return JSONResponse(content={'token': jwt_token}, status_code=200)
+        return response
     except ExpiredSignatureError as error:
         return HTTPException(detail={"message": "Invalid Authorization Token"}, status_code=401)
