@@ -2,15 +2,14 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from datetime import timedelta
+import datetime
 
-from database.models import User, Role
+from database.models import User, Post
 from database import DataBaseConnector
 
 import bcrypt
 import os
 import jwt
-import json
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -39,7 +38,8 @@ async def get_user(user_login):
         user_doc = doc_ref.get()
 
         if user_doc.exists:
-            return JSONResponse(content=user_doc.to_dict(), status_code=200)
+            user_obj = User.parse_obj(user_doc.to_dict())
+            return JSONResponse(content={'user': user_obj.dict()}, status_code=200)
 
         HTTPException(detail={'message': "This user doesn't exist"}, status_code=400)
     except:
@@ -48,13 +48,37 @@ async def get_user(user_login):
 
 @app.get('/{user_login}/posts')
 async def get_user_posts(user_login):
-    return {"user_login": user_login}
+
+    try:
+        doc_ref = database.collection('users').document(user_login)
+        user_doc = doc_ref.get()
+
+        if user_doc.exists:
+            posts = list(map(lambda post: post, doc_ref.collection('posts').stream()))
+            return JSONResponse(content={'posts': posts}, status_code=200)
+        else:
+            return HTTPException(detail={'message': "This user doesn't exist"}, status_code=400)
+    except:
+        HTTPException(detail={'message': "Internal Error"}, status_code=500)
 
 
 @app.get('/{user_login}/posts/{post_id}')
 async def get_user_post(user_login, post_id):
     return {"user_login": user_login, 'post_id': post_id}
 
+
+@app.post('/{user_login}/posts/')
+async def create_user_post(user_login, post: Post):
+    try:
+        doc_ref = database.collection('users').document(user_login)
+        user_doc = doc_ref.get()
+
+        if user_doc.exists:
+            post_ref = doc_ref.collection('posts').add(post.dict())
+            return JSONResponse({'post': post_ref.id}, status_code=200)
+        return HTTPException(detail={'message': "This user doesn't exist"}, status_code=400)
+    except:
+        HTTPException(detail={'message': "Internal Error"}, status_code=500)
 
 @app.get('/{user_login}/friends')
 async def get_user_friends(user_login):
@@ -71,23 +95,29 @@ async def signup(user: User):
     try:
         doc_ref = database.collection('users').document(user.login)
 
-        encoded_pass = user.password.encode('utf-8')
+        encoded_pass = user.password.get_secret_value().encode('utf-8')
         hashed_pass = bcrypt.hashpw(encoded_pass, HASH_KEY)
 
         doc_ref.set({
             'login': user.login,
             'email': user.email,
             'password': hashed_pass,
-            'role': Role.USER
+            'role': user.role.value
         })
 
         # верификация email
 
-        user_obj_dict = user.dict(include={'login': True, 'role': True})
+        user_obj_dict = user.dict()
+        user_obj_dict.update({'role': user.role.value})
+
         jwt_token = jwt.encode(payload=user_obj_dict, key=JWT_KEY)
 
         response = JSONResponse(content={'token': jwt_token}, status_code=200)
-        response.set_cookie(key='token', value=jwt_token, expires=timedelta(hours=24))
+
+        expires = datetime.datetime.utcnow() + datetime.timedelta(days=1)
+        expires = expires.strftime("%a, %d %b %Y %H:%M:%S GMT")
+
+        response.set_cookie(key='token', value=jwt_token, expires=expires)
 
         return response
     except:
@@ -102,18 +132,24 @@ async def login(user: User):
 
         if user_doc.exists:
             user_document_dict = user_doc.to_dict()
-            encoded_pass = user.password.encode('utf-8')
+            encoded_pass = user.password.get_secret_value().encode('utf-8')
             hashed_pass = bcrypt.hashpw(encoded_pass, HASH_KEY)
 
             if bcrypt.checkpw(hashed_pass, user_document_dict['password']):
                 return HTTPException(detail={'message': 'Wrong Password'}, status_code=403)
-            
-            user_obj_dict = user.dict(include={'login': True, 'role': True})
+                
+            user_obj = User.parse_obj(user_document_dict)
+            user_obj_dict = user_obj.dict()
+            user_obj_dict.update({'role': user_obj.role})
+
             jwt_token = jwt.encode(payload=user_obj_dict, key=JWT_KEY)
 
             response = JSONResponse(content={'token': jwt_token}, status_code=200)
-            response.set_cookie(key='token', value=jwt_token, expires=timedelta(hours=24))
 
+            expires = datetime.datetime.utcnow() + datetime.timedelta(days=1)
+            expires = expires.strftime("%a, %d %b %Y %H:%M:%S GMT")
+
+            response.set_cookie(key='token', value=jwt_token, expires=expires)
             return response
         else:
             return HTTPException(detail={'message': 'Wrong User Login'}, status_code=403)
