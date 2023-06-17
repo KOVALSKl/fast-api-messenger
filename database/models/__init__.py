@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field, SecretStr, EmailStr, PrivateAttr
-from typing import Optional
-from datetime import date
+from typing import Optional, Any
+import datetime
 from enum import Enum, IntEnum
 
 
@@ -30,5 +30,28 @@ class User(BaseModel):
 class Post(BaseModel):
     title: str
     content: str
-    created_at: date = date.today()
+    _created_at: str = PrivateAttr()
+
+    def __init__(self, **data: Any):
+        super().__init__(**data)
+
+        self._created_at = datetime.datetime.now().strftime('%d.%m.%Y %H:%M')
+
+    @property
+    def created_at(self):
+        return self._created_at
+
+
+class FriendRequest(BaseModel):
+    _created_at: str = PrivateAttr()
+    content: str
+
+    def __init__(self, **data: Any):
+        super().__init__(**data)
+
+        self._created_at = datetime.datetime.now().strftime('%d.%m.%Y %H:%M')
+
+    @property
+    def created_at(self):
+        return self._created_at
 
