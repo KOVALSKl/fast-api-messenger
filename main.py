@@ -4,7 +4,8 @@ from fastapi.exceptions import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import datetime
 
-from database.models import User, Post, FriendRequest
+from database.models import User, Post, Subscription, Chat, Message, BaseUserModel
+from typing import List, Union
 from database import DataBaseConnector
 
 import bcrypt
@@ -35,6 +36,16 @@ connection = DataBaseConnector()
 database = connection.db
 
 
+def root_collection_item_exist(collection_name:str, item_id: str):
+    item_ref = database.collection(collection_name).document(item_id)
+    item_doc = item_ref.get()
+
+    if item_doc.exists:
+        return item_ref
+
+    return None
+
+
 @app.get('/{user_login}')
 async def get_user(user_login):
     try:
@@ -45,9 +56,9 @@ async def get_user(user_login):
             user_obj = User.parse_obj(user_doc.to_dict())
             return JSONResponse(content={'user': user_obj.dict()}, status_code=200)
 
-        HTTPException(detail={'message': "This user doesn't exist"}, status_code=400)
+        return HTTPException(detail={'message': f"The user {user_login} doesn't exist"}, status_code=400)
     except:
-        HTTPException(detail={'message': "Internal Error"}, status_code=500)
+        return HTTPException(detail={'message': "Internal Error"}, status_code=500)
 
 
 @app.get('/{user_login}/posts')
@@ -66,9 +77,9 @@ async def get_user_posts(user_login):
 
             return JSONResponse(content={'posts': user_posts}, status_code=200)
         else:
-            return HTTPException(detail={'message': "This user doesn't exist"}, status_code=400)
+            return HTTPException(detail={'message': f"The user {user_login} doesn't exist"}, status_code=400)
     except:
-        HTTPException(detail={'message': "Internal Error"}, status_code=500)
+        return HTTPException(detail={'message': "Internal Error"}, status_code=500)
 
 
 @app.get('/{user_login}/posts/{post_id}')
@@ -88,9 +99,9 @@ async def get_user_post(user_login, post_id):
             else:
                 return HTTPException(detail={'message': "This post doesn't exist"}, status_code=400)
         else:
-            return HTTPException(detail={'message': "This user doesn't exist"}, status_code=400)
+            return HTTPException(detail={'message': f"The user {user_login} doesn't exist"}, status_code=400)
     except:
-        HTTPException(detail={'message': "Internal Error"}, status_code=500)
+        return HTTPException(detail={'message': "Internal Error"}, status_code=500)
 
 
 @app.post('/{user_login}/posts/')
@@ -105,109 +116,277 @@ async def create_user_post(user_login, post: Post):
             post_ref = doc_ref.collection('posts').add(post_obj_dict)
             print(post_ref.id)
             return JSONResponse({'post': post_ref.id}, status_code=200)
-        return HTTPException(detail={'message': "This user doesn't exist"}, status_code=400)
+        
+        return HTTPException(detail={'message': f"The user {user_login} doesn't exist"}, status_code=400)
     except:
-        HTTPException(detail={'message': "Internal Error"}, status_code=500)
+        return HTTPException(detail={'message': "Internal Error"}, status_code=500)
 
 
-@app.get('/{user_login}/friends')
-async def get_user_friends(user_login):
+@app.get('/{user_login}/followers')
+async def get_user_followers(user_login):
+    """
+    Получение всех подписчиков пользователя
+    :param user_login: Логин пользователя
+    :return:
+    """
     try:
         doc_ref = database.collection('users').document(user_login)
         user_doc = doc_ref.get()
 
         if user_doc.exists:
-            user_friends = []
-            for friend in doc_ref.collection('friends').stream():
-                post_obj = {'id': friend.id}
-                post_obj.update(friend.to_dict())
-                user_friends.append(post_obj)
-
-            return JSONResponse(content={'friends': user_friends}, status_code=200)
+            user_obj = user_doc.to_dict()
+            print(user_obj)
+            user_followers = []
+            for follower in doc_ref.collection('followers').stream():
+                follower_obj = {'id': follower.id}
+                follower_obj.update(follower.to_dict())
+                user_followers.append(follower_obj)
+            return JSONResponse(content={'followers': user_followers}, status_code=200)
         else:
-            return HTTPException(detail={'message': "This user doesn't exist"}, status_code=400)
+            return HTTPException(detail={'message': f"The user {user_login} doesn't exist"}, status_code=400)
     except:
-        HTTPException(detail={'message': "Internal Error"}, status_code=500)
+        return HTTPException(detail={'message': "Internal Error"}, status_code=500)
 
 
-@app.get('/{user_login}/friends/{friend_login}')
-async def get_user_friend(user_login, friend_login):
-    return {"user_login": user_login, 'friend_login': friend_login}
-
-
-@app.post('/{user_login}/friends/{friend_login}')
-async def send_friend_request(user_login, friend_login, content):
+@app.get('/{user_login}/following')
+async def get_user_followers(user_login):
+    """
+    Получение всех подписок пользователя
+    :param user_login: Логин пользователя
+    :return:
+    """
     try:
-        friend_ref = database.collection('users').document(friend_login)
-        friend_doc = friend_ref.get()
+        doc_ref = database.collection('users').document(user_login)
+        user_doc = doc_ref.get()
 
-        if friend_doc.exists:
-            user_ref = database.collection('users').document(user_login)
-            user_doc = user_ref.get()
-            if user_doc.exists:
+        if user_doc.exists:
+            user_following = []
+            for following in doc_ref.collection('following').stream():
+                follower_obj = {'id': following.id}
+                follower_obj.update(following.to_dict())
+                user_following.append(follower_obj)
+            return JSONResponse(content={'following': user_following}, status_code=200)
+        else:
+            return HTTPException(detail={'message': f"The user {user_login} doesn't exist"}, status_code=400)
+    except:
+        return HTTPException(detail={'message': "Internal Error"}, status_code=500)
 
-                received_friend_request = friend_ref.collection('friends_requests').document(user_login)
-                received_friend_request_doc = received_friend_request.get()
 
-                sent_friend_request = user_ref.collection('sent_requests').document(friend_login)
-                sent_friend_request_doc = sent_friend_request.get()
+@app.get('/{user_login}/followers/{follower_login}')
+async def get_user_friend(user_login, follower_login):
+    return {"user_login": user_login, 'friend_login': follower_login}
 
-                if sent_friend_request_doc.exists and received_friend_request_doc.exists:
+
+@app.post('/{user_login}/follow')
+async def follow(user_login, follower_login: str):
+    """
+    Подписывается на конкретного пользователя
+    :param user_login: Логин пользователя на которого подписываются
+    :param follower_login: Логин пользователя который подписывается
+    :return:
+    """
+    try:
+        following_user_ref = database.collection('users').document(user_login)
+        following_user_doc = following_user_ref.get()
+
+        if following_user_doc.exists:
+            follower_user_ref = database.collection('users').document(follower_login)
+            follower_user_doc = follower_user_ref.get()
+
+            if follower_user_doc.exists:
+
+                follower_ref = following_user_ref.collection('followers').document(follower_login)
+                follower_doc = follower_ref.get()
+
+                following_ref = follower_user_ref.collection('following').document(user_login)
+                following_doc = following_ref.get()
+
+                if follower_doc.exists or following_doc.exists:
+                    return HTTPException(detail={'message': f"You're already subscribers"}, status_code=400)
+
+                subscription = Subscription()
+                subscription_dict = subscription.dict()
+
+                follower_ref.set(subscription_dict)
+                following_ref.set(subscription_dict)
+
+                return JSONResponse(content=subscription_dict, status_code=200)
+
+            else:
+                return HTTPException(detail={'message': f"The user {user_login} {user_login} doesn't exist"}, status_code=400)
+        else:
+            return HTTPException(detail={'message': f"The user {user_login} {follower_login} doesn't exist"}, status_code=400)
+    except:
+        return HTTPException(detail={'message': "Internal Error"}, status_code=500)
+
+
+@app.delete('/{user_login}/unfollow')
+async def unfollow(user_login, follower_login: str):
+    """
+    Отписывается на конкретного пользователя
+    :param user_login: Логин пользователя от которого отписываются
+    :param follower_login: Логин пользователя который отписывается
+    :return:
+    """
+    try:
+        following_user_ref = database.collection('users').document(user_login)
+        following_user_doc = following_user_ref.get()
+
+        if following_user_doc.exists:
+            follower_user_ref = database.collection('users').document(follower_login)
+            follower_user_doc = follower_user_ref.get()
+
+            if follower_user_doc.exists:
+
+                follower_ref = following_user_ref.collection('followers').document(follower_login)
+                follower_doc = follower_ref.get()
+
+                following_ref = follower_user_ref.collection('following').document(user_login)
+                following_doc = following_ref.get()
+
+                if not (follower_doc.exists or following_doc.exists):
+                    return HTTPException(detail={'message': f"You're not a subscribers"}, status_code=400)
+
+                following_ref.delete()
+                follower_ref.delete()
+
+                return JSONResponse(content={'message': 'successfully unfollow'}, status_code=200)
+
+            else:
+                return HTTPException(detail={'message': f"The user {user_login} {user_login} doesn't exist"}, status_code=400)
+        else:
+            return HTTPException(detail={'message': f"The user {user_login} {follower_login} doesn't exist"}, status_code=400)
+    except:
+        return HTTPException(detail={'message': "Internal Error"}, status_code=500)
+
+
+@app.get('/{user_login}/chats')
+async def get_all_user_chats(user_login):
+    """
+        Получение всех чатов пользователя
+        :param user_login: Логин пользователя
+        :return:
+        """
+    try:
+        doc_ref = database.collection('users').document(user_login)
+        user_doc = doc_ref.get()
+
+        if user_doc.exists:
+            user_chats = []
+            for chat in doc_ref.collection('chats').stream():
+                chat_obj = {'id': chat.id}
+                chat_obj.update(chat.to_dict())
+                user_chats.append(chat_obj)
+            return JSONResponse(content={'chats': user_chats}, status_code=200)
+        else:
+            return HTTPException(detail={'message': f"The user {user_login} doesn't exist"}, status_code=400)
+    except:
+        return HTTPException(detail={'message': "Internal Error"}, status_code=500)
+
+
+@app.get('/{user_login}/chats/{chat_id}')
+async def get_user_chat(user_login, chat_id):
+    try:
+        doc_ref = database.collection('users').document(user_login)
+        user_doc = doc_ref.get()
+
+        if user_doc.exists:
+            chat_ref = database.collection('chats').document(chat_id)
+            chat_doc = chat_ref.get()
+
+            if chat_doc.exists:
+                chat_member_ref = chat_ref.collection('members').document(user_login)
+                chat_member_doc = chat_member_ref.get()
+
+                if chat_member_doc.exists:
+                    return JSONResponse(content=chat_doc.to_dict(), status_code=200)
+                else:
+                    return HTTPException(detail={'message': f"The user {user_login} is not a chat member"},
+                                         status_code=400)
+            else:
+                return HTTPException(detail={'message': f"The chat {chat_id} doesn't exist"}, status_code=400)
+        else:
+            return HTTPException(detail={'message': f"The user {user_login} doesn't exist"}, status_code=400)
+    except:
+        return HTTPException(detail={'message': "Internal Error"}, status_code=500)
+
+
+@app.post('/{user_login}/chats')
+async def create_chat(user_login: str, members_logins: List[str], chat_name: str = ''):
+    try:
+        chat_members = list(set(filter(lambda member: member != user_login, members_logins)))
+
+        for member in chat_members:
+            user = root_collection_item_exist('users',member)
+            if not user:
+                return HTTPException(detail={'message': f"The user {member} doesn't exist"}, status_code=400)
+
+        if len(chat_members) == 1:
+            user_ref = root_collection_item_exist('users', user_login)
+            user_obj = user_ref.get()
+            user_dict = user_obj.to_dict()
+
+            friend_ref = root_collection_item_exist('users', chat_members[0])
+            friend_obj = friend_ref.get()
+            friend_dict = friend_obj.to_dict()
+
+            if user_obj.exists and friend_obj.exists:
+                user_chat_ref = user_ref.collection('chats').document(friend_dict['login'])
+                user_chat_doc = user_chat_ref.get()
+
+                friend_chat_ref = friend_ref.collection('chats').document(user_dict['login'])
+                friend_chat_doc = friend_chat_ref.get()
+
+                if user_chat_doc.exists and friend_chat_doc.exists:
                     pass
                 else:
-                    friend_request = FriendRequest.parse_obj({
-                        'content': content
+                    chat = Chat.parse_obj({
+                        'members': members_logins,
+                        'messages': []
                     })
+                    update_time, chat_ref = database.collection('chats').add(chat.dict())
+                    created_chat_obj = {'chat_id': chat_ref.id, 'created_at': chat.created_at}
 
-                    friend_request_dict = friend_request.dict()
-                    friend_request_dict.update({'created_at': friend_request.created_at})
+                    user_chat_ref.set(created_chat_obj)
+                    friend_chat_ref.set(created_chat_obj)
 
-                    sent_friend_request.set(friend_request_dict)
-                    received_friend_request.set(friend_request_dict)
-
-                    return JSONResponse(content={'request': friend_request_dict}, status_code=200)
+                    return JSONResponse(content={'message': f'chat id: {chat_ref.id}'}, status_code=200)
             else:
-                return HTTPException(detail={'message': f"This user {user_login} doesn't exist"}, status_code=400)
+                return HTTPException(detail={'message': f"Bad request"}, status_code=400)
+
+        elif len(members_logins) > 2:
+            pass
         else:
-            return HTTPException(detail={'message': f"This user {friend_login} doesn't exist"}, status_code=400)
+            return HTTPException(detail={'message': f"A chat cannot consist of one participant"}, status_code=400)
     except:
-        HTTPException(detail={'message': "Internal Error"}, status_code=500)
+        return HTTPException(detail={'message': "Internal Error"}, status_code=500)
 
 
-@app.put('/{user_login}/friends/{friend_login}')
-async def update_friend_request_status(user_login, friend_login):
-    pass
+@app.post('/{user_login}/chats/{chat_id}')
+async def send_message(user_login, chat_id, message_content):
+    user = root_collection_item_exist('users', user_login)
+    chat = root_collection_item_exist('chats', chat_id)
 
+    if user:
+        if chat:
+            chat_doc = chat.get().to_dict()
+            chat_obj = Chat.parse_obj(chat_doc)
 
-@app.delete('/{user_login}/friends/{friend_login}')
-async def delete_friend_request(user_login, friend_login):
-    try:
-        friend_ref = database.collection('users').document(friend_login)
-        friend_doc = friend_ref.get()
+            if user_login not in chat_obj.members:
+                return HTTPException(detail={'message': f"You cannot send messages in this chat"}, status_code=400)
 
-        if friend_doc.exists:
-            user_ref = database.collection('users').document(user_login)
-            user_doc = user_ref.get()
-            if user_doc.exists:
+            message = Message.parse_obj({
+                'creator_login': user_login,
+                'content': message_content
+            }).dict()
 
-                received_friend_request = friend_ref.collection('friends_requests').document(user_login)
-                received_friend_request_doc = received_friend_request.get()
+            update_time, message_ref = chat.collection('messages').add(message)
 
-                sent_friend_request = user_ref.collection('sent_requests').document(friend_login)
-                sent_friend_request_doc = sent_friend_request.get()
-
-                if sent_friend_request_doc.exists and received_friend_request_doc.exists:
-                    sent_friend_request.delete()
-                    received_friend_request.delete()
-                    return JSONResponse(content={'message': 'Successfully deleted'}, status_code=200)
-                else:
-                    return HTTPException(detail={'message': "Request doesn't exists"}, status_code=400)
-            else:
-                return HTTPException(detail={'message': f"This user {user_login} doesn't exist"}, status_code=400)
+            return JSONResponse(content={'message': message_ref.id}, status_code=200)
         else:
-            return HTTPException(detail={'message': f"This user {friend_login} doesn't exist"}, status_code=400)
-    except:
-        HTTPException(detail={'message': "Internal Error"}, status_code=500)
+            return HTTPException(detail={'message': f"The chat doesn't exist"}, status_code=400)
+    else:
+        return HTTPException(detail={'message': f"The user {user_login} doesn't exist"}, status_code=400)
 
 @app.post('/signup')
 async def signup(user: User):

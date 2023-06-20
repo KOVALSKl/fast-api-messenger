@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, SecretStr, EmailStr, PrivateAttr
-from typing import Optional, Any
+from typing import Optional, Any, List, Union
 import datetime
 from enum import Enum, IntEnum
 
@@ -10,21 +10,11 @@ class Role(IntEnum, Enum):
 
 
 class User(BaseModel):
+    name: str
+    surname: str
     login: str
     email: Optional[EmailStr]
-    _role: Role = PrivateAttr(default=Role.USER)
     password: SecretStr = Field(exclude=True)
-
-    @property
-    def role(self):
-        return self._role
-
-    @role.setter
-    def role(self, value: Role):
-        self._role = value
-
-    class Config:
-        underscore_attrs_are_private = True
 
 
 class Post(BaseModel):
@@ -42,16 +32,38 @@ class Post(BaseModel):
         return self._created_at
 
 
-class FriendRequest(BaseModel):
-    _created_at: str = PrivateAttr()
+class Subscription(BaseModel):
+    created_at: Optional[str] = datetime.datetime.now().strftime('%d.%m.%Y %H:%M')
+
+
+class Message(BaseModel):
+    created_at: Optional[str] = datetime.datetime.now().strftime('%d.%m.%Y %H:%M')
+    creator_login: str
     content: str
 
-    def __init__(self, **data: Any):
-        super().__init__(**data)
 
-        self._created_at = datetime.datetime.now().strftime('%d.%m.%Y %H:%M')
+class Chat(BaseModel):
+    chat_name: Optional[str] = ''
+    created_at: Optional[str] = datetime.datetime.now().strftime('%d.%m.%Y %H:%M')
+    members: List[str]
+    messages: List[Message]
 
-    @property
-    def created_at(self):
-        return self._created_at
 
+class ChatMeta(BaseModel):
+    chat_id: str
+    created_at: str
+
+
+class FollowsMeta(BaseModel):
+    created_at: str
+
+
+class BaseUserModel(User):
+    chats: List[ChatMeta]
+    followers: List[FollowsMeta]
+    following: List[FollowsMeta]
+    posts: List[Post]
+    role: Role = Role.USER
+
+    class Config:
+        underscore_attrs_are_private = True
