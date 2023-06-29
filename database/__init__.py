@@ -10,7 +10,12 @@ class DataBaseConnector:
         file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config/config.json")
 
         self._cred = credentials.Certificate(file_path)
-        self._app = firebase_admin.initialize_app(self._cred)
+
+        if not firebase_admin._apps:
+            self._app = firebase_admin.initialize_app(self._cred)
+        else:
+            self._app = firebase_admin.get_app()
+
         self._db = firestore.client()
 
     @property
