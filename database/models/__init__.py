@@ -10,8 +10,8 @@ class Role(IntEnum, Enum):
 
 
 class User(BaseModel):
-    name: str
-    surname: str
+    name: Optional[str]
+    surname: Optional[str]
     login: str
     email: Optional[EmailStr]
     password: SecretStr = Field(exclude=True)
@@ -59,10 +59,10 @@ class FollowsMeta(BaseModel):
 
 
 class BaseUserModel(User):
-    chats: List[ChatMeta]
-    followers: List[FollowsMeta]
-    following: List[FollowsMeta]
-    posts: List[Post]
+    chats: List[ChatMeta] = []
+    followers: List[FollowsMeta] = []
+    following: List[FollowsMeta] = []
+    posts: List[Post] = []
     role: Role = Role.USER
 
     class Config:

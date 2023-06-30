@@ -1,10 +1,13 @@
-from fastapi import FastAPI
-from fastapi.responses import JSONResponse
+import json
+
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.exceptions import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from jwt.exceptions import ExpiredSignatureError
 import datetime
 
-from database.models import User, Subscription
+from database.models import User, Subscription, BaseUserModel
 from database import DataBaseConnector
 
 from routers import posts, followers, following, chats
@@ -12,6 +15,7 @@ from routers import posts, followers, following, chats
 import bcrypt
 import os
 import jwt
+import starlette.status as status
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -175,8 +179,12 @@ async def signup(user: User):
 
 
 @app.post('/login')
-async def login(user: User):
+async def login(request: Request):
     try:
+        request_body = await request.body()
+        decoded_body = json.loads(request_body.decode('utf-8'))
+        user = User.parse_obj(decoded_body)
+
         doc_ref = database.collection('users').document(user.login)
         user_doc = doc_ref.get()
 
@@ -187,8 +195,8 @@ async def login(user: User):
 
             if bcrypt.checkpw(hashed_pass, user_document_dict['password']):
                 return HTTPException(detail={'message': 'Wrong Password'}, status_code=403)
-                
-            user_obj = User.parse_obj(user_document_dict)
+
+            user_obj = BaseUserModel.parse_obj(user_document_dict)
             user_obj_dict = user_obj.dict()
             user_obj_dict.update({'role': user_obj.role})
 
@@ -205,3 +213,23 @@ async def login(user: User):
             return HTTPException(detail={'message': 'Wrong User Login'}, status_code=403)
     except:
         return HTTPException(detail={'message': 'Error Creating User'}, status_code=400)
+
+
+@app.middleware('http')
+async def test(request: Request, call_next):
+    try:
+        if request.url.path not in ['/signup', '/login']:
+            token = request.cookies["token"]
+
+            payload = jwt.decode(
+                token,
+                JWT_KEY,
+                algorithms=['HS256']
+            )
+        response = await call_next(request)
+        return response
+    except (KeyError, ExpiredSignatureError):
+        return RedirectResponse(
+            '/login',
+            status_code=status.HTTP_302_FOUND
+        )
