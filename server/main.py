@@ -1,5 +1,7 @@
 import json
+from typing import Union
 
+import starlette.requests
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.exceptions import HTTPException
@@ -24,7 +26,7 @@ HASH_KEY = os.environ.get('HASH_KEY').encode('utf-8')
 JWT_KEY = os.environ.get('JWT_TOKEN_KEY')
 
 app = FastAPI(
-    title='Concat',
+    title='Touch',
     description="The description",
     version='062023.1'
 )
@@ -107,7 +109,7 @@ async def follow(user_login, follower_login: str):
 @app.delete('/{user_login}/unfollow')
 async def unfollow(user_login, follower_login: str):
     """
-    Отписывается на конкретного пользователя
+    Отписывается от конкретного пользователя
     :param user_login: Логин пользователя от которого отписываются
     :param follower_login: Логин пользователя который отписывается
     :return:
@@ -137,7 +139,7 @@ async def unfollow(user_login, follower_login: str):
                 return JSONResponse(content={'message': 'successfully unfollow'}, status_code=200)
 
             else:
-                return HTTPException(detail={'message': f"The user {user_login} {user_login} doesn't exist"}, status_code=400)
+                return HTTPException(detail={'message': f"The user {user_login} doesn't exist"}, status_code=400)
         else:
             return HTTPException(detail={'message': f"The user {user_login} {follower_login} doesn't exist"}, status_code=400)
     except:
@@ -182,8 +184,8 @@ async def signup(user: User):
 async def login(request: Request):
     try:
         request_body = await request.body()
-        decoded_body = json.loads(request_body.decode('utf-8'))
-        user = User.parse_obj(decoded_body)
+        request_body_dict = json.loads(request_body.decode('utf-8'))
+        user = User.parse_obj(request_body_dict)
 
         doc_ref = database.collection('users').document(user.login)
         user_doc = doc_ref.get()
@@ -216,7 +218,7 @@ async def login(request: Request):
 
 
 @app.middleware('http')
-async def test(request: Request, call_next):
+async def authorization_token_check(request: Request, call_next):
     try:
         if request.url.path not in ['/signup', '/login']:
             token = request.cookies["token"]
