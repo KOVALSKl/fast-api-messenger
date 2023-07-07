@@ -26,7 +26,6 @@ async def get_user_followers(user_login):
 
         if user_doc.exists:
             user_obj = user_doc.to_dict()
-            print(user_obj)
             user_followers = []
             for follower in doc_ref.collection('followers').stream():
                 follower_obj = {'id': follower.id}

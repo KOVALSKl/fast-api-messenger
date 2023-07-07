@@ -5,6 +5,8 @@ from database import DataBaseConnector
 from database.models import Chat, Message
 from typing import List
 
+from lib import root_collection_item_exist
+
 router = APIRouter(
     prefix='/{user_login}/chats',
     tags=['chats'],
@@ -13,16 +15,6 @@ router = APIRouter(
 
 connection = DataBaseConnector()
 database = connection.db
-
-
-def root_collection_item_exist(collection_name:str, item_id: str):
-    item_ref = database.collection(collection_name).document(item_id)
-    item_doc = item_ref.get()
-
-    if item_doc.exists:
-        return item_ref
-
-    return None
 
 
 @router.get('/')
@@ -82,16 +74,16 @@ async def create_chat(user_login: str, members_logins: List[str], chat_name: str
         chat_members = list(set(filter(lambda member: member != user_login, members_logins)))
 
         for member in chat_members:
-            user = root_collection_item_exist('users', member)
+            user = root_collection_item_exist(database, 'users', member)
             if not user:
                 return HTTPException(detail={'message': f"The user {member} doesn't exist"}, status_code=400)
 
         if len(chat_members) == 1:
-            user_ref = root_collection_item_exist('users', user_login)
+            user_ref = root_collection_item_exist(database, 'users', user_login)
             user_obj = user_ref.get()
             user_dict = user_obj.to_dict()
 
-            friend_ref = root_collection_item_exist('users', chat_members[0])
+            friend_ref = root_collection_item_exist(database, 'users', chat_members[0])
             friend_obj = friend_ref.get()
             friend_dict = friend_obj.to_dict()
 
@@ -129,8 +121,8 @@ async def create_chat(user_login: str, members_logins: List[str], chat_name: str
 
 @router.post('/{chat_id}')
 async def send_message(user_login, chat_id, message_content):
-    user = root_collection_item_exist('users', user_login)
-    chat = root_collection_item_exist('chats', chat_id)
+    user = root_collection_item_exist(database, 'users', user_login)
+    chat = root_collection_item_exist(database, 'chats', chat_id)
 
     if user:
         if chat:
