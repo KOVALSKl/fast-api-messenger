@@ -15,16 +15,6 @@ connection = DataBaseConnector()
 database = connection.db
 
 
-def root_collection_item_exist(collection_name:str, item_id: str):
-    item_ref = database.collection(collection_name).document(item_id)
-    item_doc = item_ref.get()
-
-    if item_doc.exists:
-        return item_ref
-
-    return None
-
-
 @router.get('/')
 async def get_all_user_chats(user_login):
     """

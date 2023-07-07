@@ -9,6 +9,12 @@ class Role(IntEnum, Enum):
     ADMIN = 2
 
 
+class NotificationType(IntEnum, Enum):
+    MESSAGE = 1,
+    FOLLOWER = 2,
+    POST = 3
+
+
 class User(BaseModel):
     name: Optional[str]
     surname: Optional[str]
@@ -67,3 +73,26 @@ class BaseUserModel(User):
 
     class Config:
         underscore_attrs_are_private = True
+
+
+class Notification(BaseModel):
+    type: NotificationType
+    description: str
+    received_at: str
+
+
+class MessageNotification(Notification):
+    type: NotificationType = NotificationType.MESSAGE
+    chat_id: str
+    user: User
+
+
+class FollowerNotification(Notification):
+    type: NotificationType = NotificationType.FOLLOWER
+    user: User
+
+
+class PostNotification(Notification):
+    type: NotificationType = NotificationType.POST
+    user: User
+    post: Post

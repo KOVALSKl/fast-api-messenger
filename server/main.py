@@ -2,7 +2,7 @@ import json
 from typing import Union
 
 import starlette.requests
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.exceptions import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -50,6 +50,11 @@ app.include_router(chats.router)
 
 @app.get('/{user_login}')
 async def get_user(user_login):
+    """
+    Возвращает информацию о пользователе
+    :param user_login: Логин пользователя
+    :return:
+    """
     try:
         doc_ref = database.collection('users').document(user_login)
         user_doc = doc_ref.get()
@@ -148,6 +153,11 @@ async def unfollow(user_login, follower_login: str):
 
 @app.post('/signup')
 async def signup(user: User):
+    """
+    Производит регистрацию пользователя
+    :param user: Объект пользователя
+    :return:
+    """
     try:
         doc_ref = database.collection('users').document(user.login)
 
@@ -182,6 +192,11 @@ async def signup(user: User):
 
 @app.post('/login')
 async def login(request: Request):
+    """
+    Аутентификация пользователя
+    :param user:
+    :return:
+    """
     try:
         request_body = await request.body()
         request_body_dict = json.loads(request_body.decode('utf-8'))
