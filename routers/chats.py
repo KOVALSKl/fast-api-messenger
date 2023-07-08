@@ -2,7 +2,7 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import HTTPException
 from database import DataBaseConnector
-from database.models import Chat, Message
+from database.models import Chat, Message, Notification, NotificationType
 from typing import List
 
 from lib import root_collection_item_exist
@@ -136,6 +136,18 @@ async def send_message(user_login, chat_id, message_content):
                 'creator_login': user_login,
                 'content': message_content
             }).dict()
+
+            for member in chat_obj.members:
+                if member != user_login:
+                    member_ref = root_collection_item_exist(database, 'users', member)
+                    if member_ref:
+                        notification = Notification.parse_obj({
+                            'type': NotificationType.MESSAGE,
+                            'description': f'Пользователь {user_login} отправил сообщение',
+                            'user': user_login,
+                            'chat_id': chat.id
+                        })
+                        member_ref.collection('notifications').add(notification.dict())
 
             update_time, message_ref = chat.collection('messages').add(message)
 

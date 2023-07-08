@@ -78,6 +78,6 @@ class BaseUserModel(User):
 class Notification(BaseModel):
     type: NotificationType
     description: str
-    received_at: str
-    user: User
+    received_at: str = datetime.datetime.now().strftime('%d.%m.%Y %H:%M')
+    user: str
     chat_id: Optional[str]
