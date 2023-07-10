@@ -14,6 +14,7 @@ router = APIRouter(
 connection = DataBaseConnector()
 database = connection.db
 
+
 @router.get('/')
 async def all_notifications(user_login):
     """

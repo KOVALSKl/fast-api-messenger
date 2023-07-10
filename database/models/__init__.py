@@ -15,6 +15,12 @@ class NotificationType(IntEnum, Enum):
     POST = 3
 
 
+class RequestMethods(Enum):
+    GET = 'GET',
+    POST = 'POST',
+    PUT = 'PUT',
+    DELETE = 'DELETE'
+
 class User(BaseModel):
     name: Optional[str]
     surname: Optional[str]
@@ -81,3 +87,9 @@ class Notification(BaseModel):
     received_at: str = datetime.datetime.now().strftime('%d.%m.%Y %H:%M')
     user: str
     chat_id: Optional[str]
+
+
+class Endpoint:
+    def __init__(self, method: RequestMethods, endpoint: str):
+        self.method = method
+        self.endpoint = endpoint

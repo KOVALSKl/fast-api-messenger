@@ -1,23 +1,20 @@
 import json
-from typing import Union
 
-import starlette.requests
-from fastapi import FastAPI, Request, Response
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.exceptions import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from jwt.exceptions import ExpiredSignatureError
 import datetime
 
-from database.models import User, Subscription, BaseUserModel
+from database.models import User, Subscription, BaseUserModel, Endpoint, RequestMethods
 from database import DataBaseConnector
 
 from routers import posts, followers, following, chats
+from middlewares import AuthorizationTokenMiddleware, AccessMiddleware
 
 import bcrypt
 import os
 import jwt
-import starlette.status as status
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -41,6 +38,11 @@ app.add_middleware(
 
 connection = DataBaseConnector()
 database = connection.db
+
+app.add_middleware(AuthorizationTokenMiddleware)
+app.add_middleware(AccessMiddleware, available_endpoints=[
+    Endpoint(RequestMethods.GET, '/')
+])
 
 app.include_router(posts.router)
 app.include_router(followers.router)
@@ -230,23 +232,3 @@ async def login(request: Request):
             return HTTPException(detail={'message': 'Wrong User Login'}, status_code=403)
     except:
         return HTTPException(detail={'message': 'Error Creating User'}, status_code=400)
-
-
-@app.middleware('http')
-async def authorization_token_check(request: Request, call_next):
-    try:
-        if request.url.path not in ['/signup', '/login']:
-            token = request.cookies["token"]
-
-            payload = jwt.decode(
-                token,
-                JWT_KEY,
-                algorithms=['HS256']
-            )
-        response = await call_next(request)
-        return response
-    except (KeyError, ExpiredSignatureError):
-        return RedirectResponse(
-            '/login',
-            status_code=status.HTTP_302_FOUND
-        )
