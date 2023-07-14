@@ -1,16 +1,19 @@
 import json
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends, status
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordRequestForm
 import datetime
 
-from database.models import User, Subscription, BaseUserModel, Endpoint, RequestMethods
+from database.models import User, Subscription, BaseUserModel, Endpoint, RequestMethods, Token
 from database import DataBaseConnector
 
 from routers import posts, followers, following, chats
 from middlewares import AuthorizationTokenMiddleware, AccessMiddleware
+from dependencies import authenticate_user, create_access_token, get_password_hash
+from typing import Union
 
 import bcrypt
 import os
@@ -39,10 +42,10 @@ app.add_middleware(
 connection = DataBaseConnector()
 database = connection.db
 
-app.add_middleware(AuthorizationTokenMiddleware)
-app.add_middleware(AccessMiddleware, available_endpoints=[
-    Endpoint(RequestMethods.GET, '/')
-])
+# app.add_middleware(AuthorizationTokenMiddleware)
+# app.add_middleware(AccessMiddleware, available_endpoints=[
+#     Endpoint(RequestMethods.GET, '/')
+# ])
 
 app.include_router(posts.router)
 app.include_router(followers.router)
@@ -154,7 +157,7 @@ async def unfollow(user_login, follower_login: str):
 
 
 @app.post('/signup')
-async def signup(user: User):
+async def signup(user: BaseUserModel):
     """
     Производит регистрацию пользователя
     :param user: Объект пользователя
@@ -163,8 +166,8 @@ async def signup(user: User):
     try:
         doc_ref = database.collection('users').document(user.login)
 
-        encoded_pass = user.password.get_secret_value().encode('utf-8')
-        hashed_pass = bcrypt.hashpw(encoded_pass, HASH_KEY)
+        encoded_pass = user.password.get_secret_value()
+        hashed_pass = get_password_hash(encoded_pass)
 
         doc_ref.set({
             'login': user.login,
@@ -185,50 +188,62 @@ async def signup(user: User):
         expires = datetime.datetime.utcnow() + datetime.timedelta(days=1)
         expires = expires.strftime("%a, %d %b %Y %H:%M:%S GMT")
 
-        response.set_cookie(key='token', value=jwt_token, expires=expires)
+        # response.set_cookie(key='token', value=jwt_token, expires=expires)
 
         return response
     except:
         return HTTPException(detail={'message': 'Error Creating User'}, status_code=400)
 
 
-@app.post('/login')
-async def login(request: Request):
-    """
-    Аутентификация пользователя
-    :param user:
-    :return:
-    """
-    try:
-        request_body = await request.body()
-        request_body_dict = json.loads(request_body.decode('utf-8'))
-        user = User.parse_obj(request_body_dict)
+@app.post('/token', response_model=Token)
+async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    user = authenticate_user(form_data.username, form_data.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+    access_token = create_access_token(user)
+    return {"access_token": access_token, "token_type": 'bearer'}
 
-        doc_ref = database.collection('users').document(user.login)
-        user_doc = doc_ref.get()
-
-        if user_doc.exists:
-            user_document_dict = user_doc.to_dict()
-            encoded_pass = user.password.get_secret_value().encode('utf-8')
-            hashed_pass = bcrypt.hashpw(encoded_pass, HASH_KEY)
-
-            if bcrypt.checkpw(hashed_pass, user_document_dict['password']):
-                return HTTPException(detail={'message': 'Wrong Password'}, status_code=403)
-
-            user_obj = BaseUserModel.parse_obj(user_document_dict)
-            user_obj_dict = user_obj.dict()
-            user_obj_dict.update({'role': user_obj.role})
-
-            jwt_token = jwt.encode(payload=user_obj_dict, key=JWT_KEY)
-
-            response = JSONResponse(content={'token': jwt_token}, status_code=200)
-
-            expires = datetime.datetime.utcnow() + datetime.timedelta(days=1)
-            expires = expires.strftime("%a, %d %b %Y %H:%M:%S GMT")
-
-            response.set_cookie(key='token', value=jwt_token, expires=expires)
-            return response
-        else:
-            return HTTPException(detail={'message': 'Wrong User Login'}, status_code=403)
-    except:
-        return HTTPException(detail={'message': 'Error Creating User'}, status_code=400)
+# @app.post('/login')
+# async def login(request: Request):
+#     """
+#     Аутентификация пользователя
+#     :param user:
+#     :return:
+#     """
+#     try:
+#         request_body = await request.body()
+#         request_body_dict = json.loads(request_body.decode('utf-8'))
+#         user = User.parse_obj(request_body_dict)
+#
+#         doc_ref = database.collection('users').document(user.login)
+#         user_doc = doc_ref.get()
+#
+#         if user_doc.exists:
+#             user_document_dict = user_doc.to_dict()
+#             encoded_pass = user.password.get_secret_value().encode('utf-8')
+#             hashed_pass = bcrypt.hashpw(encoded_pass, HASH_KEY)
+#
+#             if bcrypt.checkpw(hashed_pass, user_document_dict['password']):
+#                 return HTTPException(detail={'message': 'Wrong Password'}, status_code=403)
+#
+#             user_obj = BaseUserModel.parse_obj(user_document_dict)
+#             user_obj_dict = user_obj.dict()
+#             user_obj_dict.update({'role': user_obj.role})
+#
+#             jwt_token = jwt.encode(payload=user_obj_dict, key=JWT_KEY)
+#
+#             response = JSONResponse(content={'token': jwt_token}, status_code=200)
+#
+#             expires = datetime.datetime.utcnow() + datetime.timedelta(days=1)
+#             expires = expires.strftime("%a, %d %b %Y %H:%M:%S GMT")
+#
+#             response.set_cookie(key='token', value=jwt_token, expires=expires)
+#             return response
+#         else:
+#             return HTTPException(detail={'message': 'Wrong User Login'}, status_code=403)
+#     except:
+#         return HTTPException(detail={'message': 'Error Creating User'}, status_code=400)

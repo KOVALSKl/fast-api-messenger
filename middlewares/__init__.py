@@ -17,21 +17,6 @@ load_dotenv()
 JWT_KEY = os.environ.get('JWT_TOKEN_KEY')
 
 
-async def authorization_token_check(request: Request, call_next):
-    token = request.headers["Authorization"].split()[1]
-
-    try:
-        payload = jwt.decode(
-            token,
-            key=JWT_KEY
-        )
-
-        response = await call_next(request)
-        return response
-    except ExpiredSignatureError as error:
-        return HTTPException(detail={"message": "Invalid Authorization Token"}, status_code=401)
-
-
 class AuthorizationTokenMiddleware(BaseHTTPMiddleware):
     def __init__(self, app):
         super().__init__(app)

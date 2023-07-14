@@ -21,6 +21,12 @@ class RequestMethods(Enum):
     PUT = 'PUT',
     DELETE = 'DELETE'
 
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+
 class User(BaseModel):
     name: Optional[str]
     surname: Optional[str]

@@ -7,7 +7,7 @@ import os
 
 class DataBaseConnector:
     def __init__(self):
-        file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config/config.json")
+        file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
 
         self._cred = credentials.Certificate(file_path)
 
