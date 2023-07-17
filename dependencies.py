@@ -15,7 +15,7 @@ firebase = connection.db
 config = Configuration()
 config.read()
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 
 def get_user(user_login: str):

@@ -1,29 +1,24 @@
-import json
-
-from fastapi import FastAPI, Request, Depends, status
+from fastapi import FastAPI, Depends, status
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
-import datetime
 
-from database.models import User, Subscription, BaseUserModel, Endpoint, RequestMethods, Token
+from database.models import User, Subscription, BaseUserModel, Token
 from database import DataBaseConnector
+from config import Configuration
 
 from routers import posts, followers, following, chats
-from middlewares import AuthorizationTokenMiddleware, AccessMiddleware
 from dependencies import authenticate_user, create_access_token, get_password_hash
-from typing import Union
 
-import bcrypt
-import os
-import jwt
+from lib import root_collection_item_exist
 
-from dotenv import load_dotenv
-load_dotenv()
+config = Configuration()
+config.read()
 
-HASH_KEY = os.environ.get('HASH_KEY').encode('utf-8')
-JWT_KEY = os.environ.get('JWT_TOKEN_KEY')
+HASH_KEY = config['keys']['hash']
+JWT_KEY = config['keys']['jwt']
+CRYPT_ALGORITHM = config['crypt_settings']['algorithm']
 
 app = FastAPI(
     title='Touch',
@@ -42,18 +37,16 @@ app.add_middleware(
 connection = DataBaseConnector()
 database = connection.db
 
-# app.add_middleware(AuthorizationTokenMiddleware)
-# app.add_middleware(AccessMiddleware, available_endpoints=[
-#     Endpoint(RequestMethods.GET, '/')
-# ])
-
 app.include_router(posts.router)
 app.include_router(followers.router)
 app.include_router(following.router)
 app.include_router(chats.router)
 
 
-@app.get('/{user_login}')
+@app.get('/{user_login}',
+         response_model=User,
+         summary='Получение основной информации о пользователе'
+         )
 async def get_user(user_login):
     """
     Возвращает информацию о пользователе
@@ -73,7 +66,10 @@ async def get_user(user_login):
         return HTTPException(detail={'message': "Internal Error"}, status_code=500)
 
 
-@app.post('/{user_login}/follow')
+@app.post('/{user_login}/follow',
+          response_model=Subscription,
+          summary='Подписывается на конкретного пользователя'
+          )
 async def follow(user_login, follower_login: str):
     """
     Подписывается на конкретного пользователя
@@ -116,7 +112,7 @@ async def follow(user_login, follower_login: str):
         return HTTPException(detail={'message': "Internal Error"}, status_code=500)
 
 
-@app.delete('/{user_login}/unfollow')
+@app.delete('/{user_login}/unfollow', summary="Отписывается от конкретного пользователя",)
 async def unfollow(user_login, follower_login: str):
     """
     Отписывается от конкретного пользователя
@@ -156,46 +152,45 @@ async def unfollow(user_login, follower_login: str):
         return HTTPException(detail={'message': "Internal Error"}, status_code=500)
 
 
-@app.post('/signup')
-async def signup(user: BaseUserModel):
+@app.post('/signup', summary="Регистрация пользователя")
+async def signup(user: User):
     """
     Производит регистрацию пользователя
     :param user: Объект пользователя
     :return:
     """
     try:
+        if root_collection_item_exist(user.login):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"User {user.login} already exist"
+            )
         doc_ref = database.collection('users').document(user.login)
 
         encoded_pass = user.password.get_secret_value()
         hashed_pass = get_password_hash(encoded_pass)
 
-        doc_ref.set({
-            'login': user.login,
-            'email': user.email,
-            'password': hashed_pass,
-            'role': user.role.value
-        })
+        user.password = hashed_pass
 
-        # верификация email
+        user_db_model: BaseUserModel = BaseUserModel.parse_obj(user.dict())
+        user_db_model_dict = user_db_model.dict()
 
-        user_obj_dict = user.dict()
-        user_obj_dict.update({'role': user.role.value})
+        doc_ref.set(user_db_model_dict)
 
-        jwt_token = jwt.encode(payload=user_obj_dict, key=JWT_KEY)
+        token = create_access_token(user_db_model)
+        access_token = Token(access_token=token, token_type='bearer')
 
-        response = JSONResponse(content={'token': jwt_token}, status_code=200)
-
-        expires = datetime.datetime.utcnow() + datetime.timedelta(days=1)
-        expires = expires.strftime("%a, %d %b %Y %H:%M:%S GMT")
-
-        # response.set_cookie(key='token', value=jwt_token, expires=expires)
+        response = JSONResponse(content=Token(access_token=access_token, token_type='bearer'), status_code=200)
 
         return response
     except:
         return HTTPException(detail={'message': 'Error Creating User'}, status_code=400)
 
 
-@app.post('/token', response_model=Token)
+@app.post('/login',
+          response_model=Token,
+          summary='Аутентификация пользователя'
+          )
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     user = authenticate_user(form_data.username, form_data.password)
     if not user:
@@ -206,44 +201,3 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
         )
     access_token = create_access_token(user)
     return {"access_token": access_token, "token_type": 'bearer'}
-
-# @app.post('/login')
-# async def login(request: Request):
-#     """
-#     Аутентификация пользователя
-#     :param user:
-#     :return:
-#     """
-#     try:
-#         request_body = await request.body()
-#         request_body_dict = json.loads(request_body.decode('utf-8'))
-#         user = User.parse_obj(request_body_dict)
-#
-#         doc_ref = database.collection('users').document(user.login)
-#         user_doc = doc_ref.get()
-#
-#         if user_doc.exists:
-#             user_document_dict = user_doc.to_dict()
-#             encoded_pass = user.password.get_secret_value().encode('utf-8')
-#             hashed_pass = bcrypt.hashpw(encoded_pass, HASH_KEY)
-#
-#             if bcrypt.checkpw(hashed_pass, user_document_dict['password']):
-#                 return HTTPException(detail={'message': 'Wrong Password'}, status_code=403)
-#
-#             user_obj = BaseUserModel.parse_obj(user_document_dict)
-#             user_obj_dict = user_obj.dict()
-#             user_obj_dict.update({'role': user_obj.role})
-#
-#             jwt_token = jwt.encode(payload=user_obj_dict, key=JWT_KEY)
-#
-#             response = JSONResponse(content={'token': jwt_token}, status_code=200)
-#
-#             expires = datetime.datetime.utcnow() + datetime.timedelta(days=1)
-#             expires = expires.strftime("%a, %d %b %Y %H:%M:%S GMT")
-#
-#             response.set_cookie(key='token', value=jwt_token, expires=expires)
-#             return response
-#         else:
-#             return HTTPException(detail={'message': 'Wrong User Login'}, status_code=403)
-#     except:
-#         return HTTPException(detail={'message': 'Error Creating User'}, status_code=400)

@@ -77,10 +77,10 @@ class FollowsMeta(BaseModel):
 
 
 class BaseUserModel(User):
-    chats: List[ChatMeta] = []
-    followers: List[FollowsMeta] = []
-    following: List[FollowsMeta] = []
-    posts: List[Post] = []
+    # chats: List[ChatMeta] = []
+    # followers: List[FollowsMeta] = []
+    # following: List[FollowsMeta] = []
+    # posts: List[Post] = []
     role: Role = Role.USER
 
     class Config:
