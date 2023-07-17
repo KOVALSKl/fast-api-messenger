@@ -1,14 +1,17 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import HTTPException
 from database import DataBaseConnector
-from database.models import Chat, Message, Notification, NotificationType
-from typing import List
+from database.models import Chat, Message, Notification, NotificationType, BaseUserModel, ChatMeta
+from typing import List, Union
 
-from lib import root_collection_item_exist
+from lib import root_collection_item_exist, create_chat, \
+    create_dialog, send_notification_to_chat_members, get_user_from_token
+from config import Configuration
+from jose import jwt
 
 router = APIRouter(
-    prefix='/{user_login}/chats',
+    prefix='/chats',
     tags=['chats'],
     responses={404: {"description": 'Not Found'}}
 )
@@ -16,143 +19,177 @@ router = APIRouter(
 connection = DataBaseConnector()
 database = connection.db
 
+config = Configuration()
+config.read()
+
+JWT_HASH_KEY = config['keys']['jwt']
+CRYPT_ALGORITHM = config['crypt_settings']['algorithm']
+
 
 @router.get('/')
-async def get_all_user_chats(user_login):
+async def get_all_user_chats(request: Request):
     """
         Получение всех чатов пользователя
-        :param user_login: Логин пользователя
+        :param request: Объект запроса
         :return:
         """
     try:
-        doc_ref = database.collection('users').document(user_login)
-        user_doc = doc_ref.get()
+        user = get_user_from_token(request)
 
-        if user_doc.exists:
-            user_chats = []
-            for chat in doc_ref.collection('chats').stream():
-                chat_obj = {'id': chat.id}
-                chat_obj.update(chat.to_dict())
-                user_chats.append(chat_obj)
-            return JSONResponse(content={'chats': user_chats}, status_code=200)
-        else:
-            return HTTPException(detail={'message': f"The user {user_login} doesn't exist"}, status_code=400)
+        if not user:
+            return HTTPException(detail={'message': f"Пользователь не авторизован"}, status_code=401)
+
+        user_ref = root_collection_item_exist(database, 'users', user.login)
+
+        if not user_ref:
+            return HTTPException(detail={'message': f"Пользователь не существует"}, status_code=400)
+
+        user_doc = user_ref.get()
+        user_chats = []
+        for chat in user_doc.collection('chats').stream():
+            chat_model = chat.to_dict()
+            user_chats.append(chat_model)
+        return JSONResponse(content={'chats': user_chats}, status_code=200)
     except:
         return HTTPException(detail={'message': "Internal Error"}, status_code=500)
 
 
-@router.get('/{chat_id}')
-async def get_user_chat(user_login, chat_id):
+@router.get('/{chat_id}', response_model=Chat)
+async def get_user_chat(request: Request, chat_id: str):
+    """
+    Получение конкретного чата/диалога пользователя по идентификатору чата
+    :param request: Объект запроса
+    :param chat_id: Идентификатор чата
+    :return:
+    """
     try:
-        doc_ref = database.collection('users').document(user_login)
-        user_doc = doc_ref.get()
+        user = get_user_from_token(request)
 
-        if user_doc.exists:
-            chat_ref = database.collection('chats').document(chat_id)
-            chat_doc = chat_ref.get()
+        if not user:
+            return HTTPException(detail={'message': f"Пользователь не авторизован"}, status_code=401)
 
-            if chat_doc.exists:
-                chat_member_ref = chat_ref.collection('members').document(user_login)
-                chat_member_doc = chat_member_ref.get()
+        chat_ref = root_collection_item_exist(database, 'chats', chat_id)
+        user_ref = root_collection_item_exist(database, 'users', user.login)
 
-                if chat_member_doc.exists:
-                    return JSONResponse(content=chat_doc.to_dict(), status_code=200)
-                else:
-                    return HTTPException(detail={'message': f"The user {user_login} is not a chat member"},
-                                         status_code=400)
-            else:
-                return HTTPException(detail={'message': f"The chat {chat_id} doesn't exist"}, status_code=400)
+        if not user_ref:
+            return HTTPException(detail={'message': f"Пользователь не существует"}, status_code=400)
+
+        if not chat_ref:
+            return HTTPException(detail={'message': f"The chat {chat_id} doesn't exist"}, status_code=404)
+
+        chat_doc = chat_ref.get()
+
+        chat_member_ref = chat_ref.collection('members').document(user.login)
+        chat_member_doc = chat_member_ref.get()
+
+        if chat_member_doc.exists:
+            return JSONResponse(content=chat_doc.to_dict(), status_code=200)
         else:
-            return HTTPException(detail={'message': f"The user {user_login} doesn't exist"}, status_code=400)
+            return HTTPException(detail={'message': f"The user {user.login} is not a chat member"},
+                                 status_code=403)
     except:
         return HTTPException(detail={'message': "Internal Error"}, status_code=500)
 
 
 @router.post('/')
-async def create_chat(user_login: str, members_logins: List[str], chat_name: str = ''):
+async def create_chat(request: Request, members_login: List[str], chat_name: str = ''):
+    """
+    Создает чат/диалог
+    :param request: Объект запроса
+    :param members_login: Логины участников
+    :param chat_name: Название чата (не диалога)
+    :return:
+    """
     try:
-        chat_members = list(set(filter(lambda member: member != user_login, members_logins)))
+        chat: Union[ChatMeta, None] = None
 
-        for member in chat_members:
-            user = root_collection_item_exist(database, 'users', member)
-            if not user:
-                return HTTPException(detail={'message': f"The user {member} doesn't exist"}, status_code=400)
+        creator = get_user_from_token(request)
 
-        if len(chat_members) == 1:
-            user_ref = root_collection_item_exist(database, 'users', user_login)
-            user_obj = user_ref.get()
-            user_dict = user_obj.to_dict()
+        if not creator:
+            return HTTPException(detail={'message': f"Пользователь не авторизован"}, status_code=401)
 
-            friend_ref = root_collection_item_exist(database, 'users', chat_members[0])
-            friend_obj = friend_ref.get()
-            friend_dict = friend_obj.to_dict()
+        user_ref = root_collection_item_exist(database, 'users', creator.login)
 
-            if user_obj.exists and friend_obj.exists:
-                user_chat_ref = user_ref.collection('chats').document(friend_dict['login'])
-                user_chat_doc = user_chat_ref.get()
+        if not user_ref:
+            return HTTPException(detail={'message': f"Пользователь не существует"}, status_code=400)
 
-                friend_chat_ref = friend_ref.collection('chats').document(user_dict['login'])
-                friend_chat_doc = friend_chat_ref.get()
+        chat_members_login = list(set(filter(lambda member: member != creator.login, members_login)))
 
-                if user_chat_doc.exists and friend_chat_doc.exists:
-                    pass
-                else:
-                    chat = Chat.parse_obj({
-                        'members': members_logins,
-                        'messages': []
-                    })
-                    update_time, chat_ref = database.collection('chats').add(chat.dict())
-                    created_chat_obj = {'chat_id': chat_ref.id, 'created_at': chat.created_at}
+        for member in chat_members_login:
+            member_ref = root_collection_item_exist(database, 'users', member)
+            if not member_ref:
+                return HTTPException(detail={'message': f"The user {member} doesn't exist"}, status_code=404)
 
-                    user_chat_ref.set(created_chat_obj)
-                    friend_chat_ref.set(created_chat_obj)
+        if len(chat_members_login) == 1:
+            member_ref = root_collection_item_exist(database, 'users', members_login[0])
+            chat = create_dialog(database, user_ref, member_ref)
+        elif len(chat_members_login) > 1:
+            chat_members_models = chat_members_login
+            chat_members_models.append(creator.login)
 
-                    return JSONResponse(content={'message': f'chat id: {chat_ref.id}'}, status_code=200)
-            else:
-                return HTTPException(detail={'message': f"Bad request"}, status_code=400)
-
-        elif len(members_logins) > 2:
-            pass
+            chat = create_chat(database, chat_members_models, chat_name)
         else:
-            return HTTPException(detail={'message': f"A chat cannot consist of one participant"}, status_code=400)
+            return HTTPException(detail={'message': f"Невозможно создать чат без участников"}, status_code=400)
+
+        if not chat:
+            return HTTPException(detail={'message': "Не удалось создать чат"}, status_code=500)
+
+        response = JSONResponse(content=chat.dict(), status_code=200)
+        return response
+
     except:
-        return HTTPException(detail={'message': "Internal Error"}, status_code=500)
+        return HTTPException(detail={'message': f"Internal Error"}, status_code=500)
 
 
 @router.post('/{chat_id}')
-async def send_message(user_login, chat_id, message_content):
-    user = root_collection_item_exist(database, 'users', user_login)
-    chat = root_collection_item_exist(database, 'chats', chat_id)
+async def send_message(request: Request, chat_id, message_content):
+    """
+    Отправляет сообщение в конкретный чат
+    :param request: Объект запроса
+    :param chat_id: Идентификатор чата
+    :param message_content: Контент сообщения
+    :return:
+    """
+    user = get_user_from_token(request)
 
-    if user:
-        if chat:
-            chat_doc = chat.get().to_dict()
-            chat_obj = Chat.parse_obj(chat_doc)
+    if not user:
+        return HTTPException(detail={'message': f"Пользователь не авторизован"}, status_code=401)
 
-            if user_login not in chat_obj.members:
-                return HTTPException(detail={'message': f"You cannot send messages in this chat"}, status_code=400)
+    user_ref = root_collection_item_exist(database, 'users', user.login)
+    chat_ref = root_collection_item_exist(database, 'chats', chat_id)
 
-            message = Message.parse_obj({
-                'creator_login': user_login,
-                'content': message_content
-            }).dict()
+    if not user_ref:
+        raise HTTPException(detail={'message': f"Пользователя {user.login} не существует"}, status_code=401)
 
-            for member in chat_obj.members:
-                if member != user_login:
-                    member_ref = root_collection_item_exist(database, 'users', member)
-                    if member_ref:
-                        notification = Notification.parse_obj({
-                            'type': NotificationType.MESSAGE,
-                            'description': f'Пользователь {user_login} отправил сообщение',
-                            'user': user_login,
-                            'chat_id': chat.id
-                        })
-                        member_ref.collection('notifications').add(notification.dict())
+    if not chat_ref:
+        raise HTTPException(detail={'message': f"Чата {chat_id} не существует"}, status_code=400)
 
-            update_time, message_ref = chat.collection('messages').add(message)
+    chat_doc = chat_ref.get()
+    chat_model = Chat(**chat_doc.to_dict())
 
-            return JSONResponse(content={'message': message_ref.id}, status_code=200)
-        else:
-            return HTTPException(detail={'message': f"The chat doesn't exist"}, status_code=400)
+    chat_member_ref = chat_ref.collection('members').document(user.login)
+    chat_member_doc = chat_member_ref.get()
+
+    if chat_member_doc.exists:
+        message = Message(
+            creator_login=user.login,
+            content=message_content
+        )
+
+        send_notification_to_chat_members(
+            database,
+            chat_model,
+            user.login,
+            Notification(
+                type=NotificationType.MESSAGE,
+                description=f'Пользователь {user.login} отправил сообщение',
+                user=user.login,
+                chat_id=chat_id
+            )
+        )
+
+        update_time, message_ref = chat_ref.collection('messages').add(message)
+
+        return JSONResponse(content={'message': message_ref.id}, status_code=200)
     else:
-        return HTTPException(detail={'message': f"The user {user_login} doesn't exist"}, status_code=400)
+        return HTTPException(detail={'message': f"Нет доступа к чату"}, status_code=403)

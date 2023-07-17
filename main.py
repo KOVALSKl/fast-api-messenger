@@ -10,6 +10,7 @@ from config import Configuration
 
 from routers import posts, followers, following, chats
 from dependencies import authenticate_user, create_access_token, get_password_hash
+from middlewares import TestMiddleware
 
 from lib import root_collection_item_exist
 
@@ -32,6 +33,10 @@ app.add_middleware(
    allow_credentials=True,
    allow_methods=allow_all,
    allow_headers=allow_all
+)
+
+app.add_middleware(
+    TestMiddleware
 )
 
 connection = DataBaseConnector()
@@ -201,3 +206,13 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
         )
     access_token = create_access_token(user)
     return {"access_token": access_token, "token_type": 'bearer'}
+
+
+@app.post('/token', response_model=Token)
+async def test(user: BaseUserModel):
+    access_token = create_access_token(user)
+
+    response = JSONResponse(content=dict(access_token=access_token, token_type='bearer'), status_code=200)
+    response.set_cookie('token', access_token)
+
+    return response

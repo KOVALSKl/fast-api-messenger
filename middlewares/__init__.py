@@ -17,6 +17,18 @@ load_dotenv()
 JWT_KEY = os.environ.get('JWT_TOKEN_KEY')
 
 
+class AuthTokenExist(BaseHTTPMiddleware):
+    def __init__(self, app, available_endpoints: List[Endpoint]):
+        super().__init__(app)
+
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
+        # try:
+        #     endpoint_name = request.url.path
+        pass
+
+
 class AuthorizationTokenMiddleware(BaseHTTPMiddleware):
     def __init__(self, app):
         super().__init__(app)
@@ -75,5 +87,17 @@ class AccessMiddleware(BaseHTTPMiddleware):
             )
 
 
+class TestMiddleware(BaseHTTPMiddleware):
+    def __init__(self, app):
+        super().__init__(app)
 
+    async def dispatch(
+            self, request: Request, call_next: RequestResponseEndpoint
+    ):
+            print(request.url.path)
+            print(request.method)
+            print(request.cookies)
+
+            response = await call_next(request)
+            return response
 

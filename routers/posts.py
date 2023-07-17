@@ -1,11 +1,11 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import HTTPException
 from database import DataBaseConnector
 from database.models import Post
 
 router = APIRouter(
-    prefix='/{user_login}/posts',
+    prefix='/posts',
     tags=['posts'],
     responses={404: {"description": 'Not Found'}}
 )
@@ -15,23 +15,24 @@ database = connection.db
 
 
 @router.get('/')
-async def get_user_posts(user_login):
-    try:
-        doc_ref = database.collection('users').document(user_login)
-        user_doc = doc_ref.get()
-
-        if user_doc.exists:
-            user_posts = []
-            for post in doc_ref.collection('posts').stream():
-                post_obj = {'id': post.id}
-                post_obj.update(post.to_dict())
-                user_posts.append(post_obj)
-
-            return JSONResponse(content={'posts': user_posts}, status_code=200)
-        else:
-            return HTTPException(detail={'message': f"The user {user_login} doesn't exist"}, status_code=400)
-    except:
-        return HTTPException(detail={'message': "Internal Error"}, status_code=500)
+async def get_user_posts(request: Request, user_login):
+    print(request.url.path)
+    # try:
+    #     doc_ref = database.collection('users').document(user_login)
+    #     user_doc = doc_ref.get()
+    #
+    #     if user_doc.exists:
+    #         user_posts = []
+    #         for post in doc_ref.collection('posts').stream():
+    #             post_obj = {'id': post.id}
+    #             post_obj.update(post.to_dict())
+    #             user_posts.append(post_obj)
+    #
+    #         return JSONResponse(content={'posts': user_posts}, status_code=200)
+    #     else:
+    #         return HTTPException(detail={'message': f"The user {user_login} doesn't exist"}, status_code=400)
+    # except:
+    #     return HTTPException(detail={'message': "Internal Error"}, status_code=500)
 
 
 @router.get('/{post_id}')

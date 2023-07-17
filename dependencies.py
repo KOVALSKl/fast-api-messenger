@@ -1,12 +1,10 @@
 from lib import verify_password, get_password_hash, \
     create_access_token, root_collection_item_exist
-from database.models import User, BaseUserModel
+from database.models import BaseUserModel
 from database import DataBaseConnector
 
+from fastapi import Request
 from fastapi.security import OAuth2PasswordBearer
-from fastapi import Depends, HTTPException, status
-
-from jose import JWTError, jwt
 from config import Configuration
 
 connection = DataBaseConnector()
@@ -33,3 +31,10 @@ def authenticate_user(user_login: str, password: str):
     if not verify_password(password, user.password.get_secret_value()):
         return False
     return user
+
+
+def check_user_permission(request: Request, user_login: str):
+    print(request, user_login)
+    user_ref = get_user(user_login)
+    if user_ref:
+        user_dict = (user_ref.get()).to_dict()
