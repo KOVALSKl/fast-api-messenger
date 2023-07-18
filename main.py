@@ -10,7 +10,6 @@ from config import Configuration
 
 from routers import posts, followers, following, chats
 from dependencies import authenticate_user, create_access_token, get_password_hash
-from middlewares import TestMiddleware
 
 from lib import root_collection_item_exist
 
@@ -35,9 +34,6 @@ app.add_middleware(
    allow_headers=allow_all
 )
 
-app.add_middleware(
-    TestMiddleware
-)
 
 connection = DataBaseConnector()
 database = connection.db
@@ -158,26 +154,23 @@ async def unfollow(user_login, follower_login: str):
 
 
 @app.post('/signup', summary="Регистрация пользователя")
-async def signup(user: User):
+async def signup(user: BaseUserModel):
     """
     Производит регистрацию пользователя
     :param user: Объект пользователя
     :return:
     """
     try:
-        if root_collection_item_exist(user.login):
+        if root_collection_item_exist(database, 'users', user.login):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"User {user.login} already exist"
             )
         doc_ref = database.collection('users').document(user.login)
 
-        encoded_pass = user.password.get_secret_value()
-        hashed_pass = get_password_hash(encoded_pass)
-
-        user.password = hashed_pass
-
-        user_db_model: BaseUserModel = BaseUserModel.parse_obj(user.dict())
+        user.password = get_password_hash(user.password)
+        print(user)
+        user_db_model: BaseUserModel = BaseUserModel(**user.dict())
         user_db_model_dict = user_db_model.dict()
 
         doc_ref.set(user_db_model_dict)
@@ -185,7 +178,7 @@ async def signup(user: User):
         token = create_access_token(user_db_model)
         access_token = Token(access_token=token, token_type='bearer')
 
-        response = JSONResponse(content=Token(access_token=access_token, token_type='bearer'), status_code=200)
+        response = JSONResponse(content=access_token.dict(), status_code=200)
 
         return response
     except:
@@ -204,8 +197,12 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"}
         )
-    access_token = create_access_token(user)
-    return {"access_token": access_token, "token_type": 'bearer'}
+    token = create_access_token(user)
+    token_model = Token(access_token=token, token_type='bearer')
+    response = JSONResponse(content=token_model.dict(), status_code=200)
+    response.set_cookie('token', token)
+
+    return response
 
 
 @app.post('/token', response_model=Token)

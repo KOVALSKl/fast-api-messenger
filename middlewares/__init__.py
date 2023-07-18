@@ -1,7 +1,6 @@
 from fastapi import Request, HTTPException
 from fastapi.exceptions import HTTPException
 from dotenv import load_dotenv
-from jwt.exceptions import ExpiredSignatureError
 
 from starlette import status
 from starlette.responses import Response, RedirectResponse
@@ -9,8 +8,8 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 
 from database.models import Endpoint
 from typing import List
+from jose import jwt, ExpiredSignatureError, JWTError
 
-import jwt
 import os
 
 load_dotenv()
@@ -85,19 +84,3 @@ class AccessMiddleware(BaseHTTPMiddleware):
                 '/login',
                 status_code=status.HTTP_302_FOUND
             )
-
-
-class TestMiddleware(BaseHTTPMiddleware):
-    def __init__(self, app):
-        super().__init__(app)
-
-    async def dispatch(
-            self, request: Request, call_next: RequestResponseEndpoint
-    ):
-            print(request.url.path)
-            print(request.method)
-            print(request.cookies)
-
-            response = await call_next(request)
-            return response
-

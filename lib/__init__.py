@@ -87,10 +87,10 @@ def create_dialog(database, creator_ref, member_ref) -> Union[ChatMeta, None]:
 
     chat_meta = None
 
-    if creator_chat_doc.exists and member_chat_doc.exists:
-        raise HTTPException(detail={'message': 'Диалог существует'}, status_code=400)
-    else:
-        try:
+    try:
+        if creator_chat_doc.exists and member_chat_doc.exists:
+            raise HTTPException(detail={'message': 'Диалог существует'}, status_code=400)
+        else:
             chat = Chat(
                 members=[creator_model.login, member_model.login],
                 messages=[],
@@ -99,31 +99,31 @@ def create_dialog(database, creator_ref, member_ref) -> Union[ChatMeta, None]:
             update_time, chat_ref = database.collection('chats').add(chat.dict())
             chat_meta = ChatMeta(
                 chat_id=chat_ref.id,
-                created_at=update_time
+                created_at=chat.created_at
             )
-
             creator_chat_ref.set(chat_meta.dict())
             member_chat_ref.set(chat_meta.dict())
-
-        finally:
-            return chat_meta
+    finally:
+        return chat_meta
 
 
 def create_chat(database, members, chat_name: str = uuid4()) -> Union[ChatMeta, None]:
+
+    chat_meta = None
     try:
         chat = Chat(
             members=members,
             chat_name=chat_name
         )
-        chat_meta = None
-
+        print(chat)
         update_time, chat_ref = database.collection('chats').add(chat.dict())
         chat_meta = ChatMeta(
             chat_id=chat_ref.id,
-            created_at=update_time
+            created_at=chat.created_at
         )
-
+        print(chat_meta)
         for member_login in members:
+            print(member_login)
             member_ref = root_collection_item_exist(database, 'users', member_login)
             member_chat_ref = member_ref.collection('chats').document(chat_name)
             member_chat_ref.set(chat_meta.dict())

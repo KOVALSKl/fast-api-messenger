@@ -28,7 +28,7 @@ def authenticate_user(user_login: str, password: str):
     user = get_user(user_login)
     if not user:
         return False
-    if not verify_password(password, user.password.get_secret_value()):
+    if not verify_password(password, user.password):
         return False
     return user
 

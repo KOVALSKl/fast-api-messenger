@@ -32,7 +32,11 @@ class User(BaseModel):
     surname: Optional[str]
     login: str
     email: Optional[EmailStr]
-    password: SecretStr = Field(exclude=True)
+
+
+class BaseUserModel(User):
+    role: Role = Role.USER
+    password: str
 
 
 class Post(BaseModel):
@@ -64,7 +68,10 @@ class Chat(BaseModel):
     chat_name: Optional[str] = None
     created_at: Optional[str] = datetime.datetime.now().strftime('%d.%m.%Y %H:%M')
     members: List[str]
-    messages: List[Message] = []
+
+
+class ChatResponse(Chat):
+    messages: List[Message]
 
 
 class FollowsMeta(BaseModel):
@@ -74,10 +81,6 @@ class FollowsMeta(BaseModel):
 class ChatMeta(BaseModel):
     chat_id: str
     created_at: str
-
-
-class BaseUserModel(User):
-    role: Role = Role.USER
 
 
 class Notification(BaseModel):
