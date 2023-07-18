@@ -11,7 +11,7 @@ from config import Configuration
 from routers import posts, followers, following, chats
 from dependencies import authenticate_user, create_access_token, get_password_hash
 
-from lib import root_collection_item_exist
+from lib import root_collection_item_exist, set_token_to_cookie
 
 config = Configuration()
 config.read()
@@ -169,7 +169,6 @@ async def signup(user: BaseUserModel):
         doc_ref = database.collection('users').document(user.login)
 
         user.password = get_password_hash(user.password)
-        print(user)
         user_db_model: BaseUserModel = BaseUserModel(**user.dict())
         user_db_model_dict = user_db_model.dict()
 
@@ -179,6 +178,7 @@ async def signup(user: BaseUserModel):
         access_token = Token(access_token=token, token_type='bearer')
 
         response = JSONResponse(content=access_token.dict(), status_code=200)
+        response = set_token_to_cookie(response, access_token)
 
         return response
     except:
@@ -200,7 +200,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     token = create_access_token(user)
     token_model = Token(access_token=token, token_type='bearer')
     response = JSONResponse(content=token_model.dict(), status_code=200)
-    response.set_cookie('token', token)
+    response = set_token_to_cookie(response, token_model)
 
     return response
 

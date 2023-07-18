@@ -1,9 +1,9 @@
 from fastapi.exceptions import HTTPException
-from fastapi import Request
+from fastapi import Response, Request
 from passlib.context import CryptContext
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 
-from database.models import BaseUserModel, Chat, ChatMeta, Notification, NotificationType
+from database.models import BaseUserModel, Chat, ChatMeta, Notification, Token
 from config import Configuration
 
 from jose import JWTError, jwt, ExpiredSignatureError
@@ -54,7 +54,7 @@ def get_password_hash(password: str):
     return pwd_context.hash(password)
 
 
-def create_access_token(user: BaseUserModel, expires_delta: timedelta = timedelta(days=1)):
+def create_access_token(user: BaseUserModel):
     """
     Создание JWT токена для авторизации пользователя
     :param user: Пользователь
@@ -62,17 +62,25 @@ def create_access_token(user: BaseUserModel, expires_delta: timedelta = timedelt
     :return: Возвращает сформированный токен в виде строки
     """
 
-    expires = datetime.utcnow() + expires_delta
-
-    # если токен не будет установлен в кукисы, установим его сами
-    # exp_str = expires.strftime("%a, %d %b %Y %H:%M:%S GMT")
-
     user_dict = user.dict()
-    user_dict.update({'exp': expires})
     encoded_jwt = jwt.encode(user_dict, config['keys']['jwt'],
                              algorithm=config['crypt_settings']['algorithm'])
 
     return encoded_jwt
+
+
+def set_token_to_cookie(response: Response, token: Token, expires_delta: timedelta = timedelta(days=1)):
+    """
+
+    :param response: Объект ответа
+    :param token: Созданый токен
+    :param expires_delta: Срок годности токена (по умолчанию 1 день)
+    :return:
+    """
+    expires = (datetime.utcnow() + expires_delta).strftime("%a, %d %b %Y %H:%M:%S GMT")
+    response.set_cookie('token', token.access_token, expires=expires)
+
+    return response
 
 
 def create_dialog(database, creator_ref, member_ref) -> Union[ChatMeta, None]:
@@ -115,15 +123,12 @@ def create_chat(database, members, chat_name: str = uuid4()) -> Union[ChatMeta, 
             members=members,
             chat_name=chat_name
         )
-        print(chat)
         update_time, chat_ref = database.collection('chats').add(chat.dict())
         chat_meta = ChatMeta(
             chat_id=chat_ref.id,
             created_at=chat.created_at
         )
-        print(chat_meta)
         for member_login in members:
-            print(member_login)
             member_ref = root_collection_item_exist(database, 'users', member_login)
             member_chat_ref = member_ref.collection('chats').document(chat_name)
             member_chat_ref.set(chat_meta.dict())
