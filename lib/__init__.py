@@ -141,7 +141,8 @@ def send_notification_to_chat_members(
 def get_user_from_token(request: Request) -> Union[BaseUserModel, None]:
     try:
         user = None
-        token = request.cookies.get('token')
+
+        token = request.headers.get('Authorization').split()[1]
         user = BaseUserModel.parse_obj(jwt.decode(token, JWT_HASH_KEY, algorithms=CRYPT_ALGORITHM))
 
     except (JWTError, ExpiredSignatureError, KeyError):
