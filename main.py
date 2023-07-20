@@ -12,7 +12,7 @@ from config import Configuration
 from routers import posts, followers, following, chats
 from dependencies import authenticate_user, create_access_token, get_password_hash
 
-from lib import root_collection_item_exist, set_token_to_cookie
+from lib import root_collection_item_exist
 
 config = Configuration()
 config.read()
@@ -175,11 +175,8 @@ async def signup(user: BaseUserModel):
 
         doc_ref.set(user_db_model_dict)
 
-        token = create_access_token(user_db_model)
-        access_token = Token(access_token=token, token_type='bearer')
-
-        response = JSONResponse(content=access_token.dict(), status_code=200)
-        response = set_token_to_cookie(response, access_token)
+        token_model = create_access_token(user_db_model)
+        response = JSONResponse(content=token_model.dict(), status_code=200)
 
         return response
     except:
@@ -198,19 +195,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"}
         )
-    token = create_access_token(user)
-    token_model = Token(access_token=token, token_type='bearer')
+    token_model = create_access_token(user)
     response = JSONResponse(content=token_model.dict(), status_code=200)
-    response = set_token_to_cookie(response, token_model)
-
-    return response
-
-
-@app.post('/token', response_model=Token)
-async def test(user: BaseUserModel):
-    access_token = create_access_token(user)
-
-    response = JSONResponse(content=dict(access_token=access_token, token_type='bearer'), status_code=200)
-    response.set_cookie('token', access_token)
 
     return response

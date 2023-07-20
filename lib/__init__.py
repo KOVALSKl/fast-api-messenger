@@ -54,7 +54,7 @@ def get_password_hash(password: str):
     return pwd_context.hash(password)
 
 
-def create_access_token(user: BaseUserModel):
+def create_access_token(user: BaseUserModel, expires_delta: timedelta = timedelta(days=1)):
     """
     Создание JWT токена для авторизации пользователя
     :param user: Пользователь
@@ -63,24 +63,14 @@ def create_access_token(user: BaseUserModel):
     """
 
     user_dict = user.dict()
+    expires = (datetime.utcnow() + expires_delta).strftime("%a, %d %b %Y %H:%M:%S GMT")
+    user_dict.update({'expires': expires})
     encoded_jwt = jwt.encode(user_dict, config['keys']['jwt'],
                              algorithm=config['crypt_settings']['algorithm'])
 
-    return encoded_jwt
+    token = Token(access_token=encoded_jwt, token_type='Bearer', expires=expires)
 
-
-def set_token_to_cookie(response: Response, token: Token, expires_delta: timedelta = timedelta(days=1)):
-    """
-
-    :param response: Объект ответа
-    :param token: Созданый токен
-    :param expires_delta: Срок годности токена (по умолчанию 1 день)
-    :return:
-    """
-    expires = (datetime.utcnow() + expires_delta).strftime("%a, %d %b %Y %H:%M:%S GMT")
-    response.set_cookie('token', token.access_token, expires=expires)
-
-    return response
+    return token
 
 
 def create_dialog(database, creator_ref, member_ref) -> Union[ChatMeta, None]:
