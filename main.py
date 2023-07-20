@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 
 from database.models import User, Subscription, BaseUserModel, Token
+from middlewares import AuthTokenExist
 from database import DataBaseConnector
 from config import Configuration
 
@@ -33,7 +34,7 @@ app.add_middleware(
    allow_methods=allow_all,
    allow_headers=allow_all
 )
-
+app.add_middleware(AuthTokenExist)
 
 connection = DataBaseConnector()
 database = connection.db

@@ -18,8 +18,9 @@ config.read()
 JWT_HASH_KEY = config['keys']['jwt']
 HASH_ALGORITHM = config['crypt_settings']['algorithm']
 
+
 class AuthTokenExist(BaseHTTPMiddleware):
-    def __init__(self, app, available_endpoints: List[Endpoint]):
+    def __init__(self, app):
         super().__init__(app)
 
     async def dispatch(
