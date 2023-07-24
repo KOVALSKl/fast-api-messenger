@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import HTTPException
 
 import lib
+import json
 from database import DataBaseConnector
-from database.models import Chat, Message, Notification, NotificationType, BaseUserModel, ChatMeta
+from database.models import Chat, Message, Notification, NotificationType, BaseUserModel, ChatMeta, WebSocketManager
 from typing import List, Union
 
 from lib import root_collection_item_exist, create_chat, \
@@ -20,6 +21,8 @@ router = APIRouter(
 
 connection = DataBaseConnector()
 database = connection.db
+
+websocket_manager = WebSocketManager()
 
 config = Configuration()
 config.read()
@@ -131,22 +134,23 @@ async def create_chat(request: Request, members_login: List[str], chat_name: str
 
         response = JSONResponse(content=chat.dict(), status_code=200)
         return response
+
+        # здесь нужен редирект в созданный чат
+
     except HTTPException as err:
         return err
     except Exception as err:
         return HTTPException(detail={'message': f"{err}"}, status_code=500)
 
 
-@router.post('/{chat_id}')
-async def send_message(request: Request, chat_id, message_content):
+async def send_message(user: BaseUserModel, chat_id, message_content):
     """
     Отправляет сообщение в конкретный чат
-    :param request: Объект запроса
+    :param user: Объект пользователя
     :param chat_id: Идентификатор чата
     :param message_content: Контент сообщения
     :return:
     """
-    user = get_user_from_token(request)
 
     if not user:
         return HTTPException(detail={'message': f"Пользователь не авторизован"}, status_code=401)
@@ -186,3 +190,17 @@ async def send_message(request: Request, chat_id, message_content):
     update_time, message_ref = chat_ref.collection('messages').add(message.dict())
 
     return JSONResponse(content={'message': message_ref.id}, status_code=200)
+
+
+@router.websocket("/{chat_id}/ws")
+async def send_message_to(websocket: WebSocket, chat_id: str, auth_token: str):
+    await websocket_manager.connect(websocket)
+    # нужно добавить тип действия, вдруг мы хотим удалить сообщение или изменить его
+    try:
+        while True:
+            user = get_user_from_token(auth_token)
+            data_json = json.loads(await websocket.receive_json())
+            message = Message(**data_json)
+            await websocket_manager.send_message_to_user(message, user, chat_id)
+    except WebSocketDisconnect:
+        websocket_manager.disconnect(websocket, user)

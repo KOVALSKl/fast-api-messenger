@@ -1,9 +1,10 @@
 from fastapi.exceptions import HTTPException
-from fastapi import Response, Request
+from fastapi import Request
+from fastapi.responses import JSONResponse
 from passlib.context import CryptContext
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta
 
-from database.models import BaseUserModel, Chat, ChatMeta, Notification, Token
+from database.models import BaseUserModel, Chat, ChatMeta, Notification, Token, NotificationType, Message
 from config import Configuration
 
 from jose import JWTError, jwt, ExpiredSignatureError
@@ -149,3 +150,48 @@ def get_user_from_token(request: Request) -> Union[BaseUserModel, None]:
         raise HTTPException(detail={'message': 'Пользователь не авторизован'}, status_code=401)
     finally:
         return user
+
+
+async def send_message(database, user: BaseUserModel, chat_id: str, message: Message):
+    """
+    Сохраняет отправленное сообщение в базе данных
+    :param database: Объект базы данных
+    :param user: Объект пользователя
+    :param chat_id: Идентификатор чата
+    :param message: Сообщение
+    :return:
+    """
+
+    if not user:
+        return HTTPException(detail={'message': f"Пользователь не авторизован"}, status_code=401)
+
+    user_ref = root_collection_item_exist(database, 'users', user.login)
+    chat_ref = root_collection_item_exist(database, 'chats', chat_id)
+
+    if not user_ref:
+        raise HTTPException(detail={'message': f"Пользователя {user.login} не существует"}, status_code=401)
+
+    if not chat_ref:
+        raise HTTPException(detail={'message': f"Чата {chat_id} не существует"}, status_code=400)
+
+    chat_doc = chat_ref.get()
+    chat_model = Chat(**chat_doc.to_dict())
+
+    if user.login not in chat_model.members:
+        return HTTPException(detail={'message': f"Нет доступа к чату"}, status_code=403)
+
+    send_notification_to_chat_members(
+        database,
+        chat_model,
+        user.login,
+        Notification(
+            type=NotificationType.MESSAGE,
+            description=f'Пользователь {user.login} отправил сообщение',
+            user=user.login,
+            chat_id=chat_id
+        )
+    )
+
+    update_time, message_ref = chat_ref.collection('messages').add(message.dict())
+
+    return message_ref.id

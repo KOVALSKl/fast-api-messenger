@@ -4,7 +4,7 @@ from fastapi.exceptions import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 
-from database.models import User, Subscription, BaseUserModel, Token
+from database.models import User, Subscription, BaseUserModel, Token, WebSocketManager
 from middlewares import AuthTokenExist
 from database import DataBaseConnector
 from config import Configuration
@@ -38,6 +38,8 @@ app.add_middleware(AuthTokenExist)
 
 connection = DataBaseConnector()
 database = connection.db
+
+websocket_manager = WebSocketManager()
 
 app.include_router(posts.router)
 app.include_router(followers.router)
@@ -192,7 +194,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
+            detail="Неверный логин или пароль",
             headers={"WWW-Authenticate": "Bearer"}
         )
     token_model = create_access_token(user)
