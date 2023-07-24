@@ -76,16 +76,17 @@ class Chat(BaseModel):
     members: List[str]
 
 
+class ChatMeta(BaseModel):
+    chat_name: str
+    chat_id: str
+    created_at: str
+
+
 class ChatResponse(Chat):
     messages: List[Message]
 
 
 class FollowsMeta(BaseModel):
-    created_at: str
-
-
-class ChatMeta(BaseModel):
-    chat_id: str
     created_at: str
 
 

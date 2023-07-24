@@ -27,7 +27,7 @@ class AuthTokenExist(BaseHTTPMiddleware):
         self, request: Request, call_next: RequestResponseEndpoint
     ):
         try:
-            token = request.cookies["token"]
+            token = request.headers["Authorization"].split()[1]
             payload = jwt.decode(
                 token,
                 JWT_HASH_KEY,

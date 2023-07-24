@@ -96,14 +96,22 @@ def create_dialog(database, creator_ref, member_ref) -> Union[ChatMeta, None]:
             )
 
             update_time, chat_ref = database.collection('chats').add(chat.dict())
-            chat_meta = ChatMeta(
+
+            member_chat_meta = ChatMeta(
+                chat_name=creator_model.login,
+                chat_id=chat_ref.id,
+                created_at=chat.created_at,
+            )
+
+            creator_chat_meta = ChatMeta(
+                chat_name=member_model.login,
                 chat_id=chat_ref.id,
                 created_at=chat.created_at
             )
-            creator_chat_ref.set(chat_meta.dict())
-            member_chat_ref.set(chat_meta.dict())
+            creator_chat_ref.set(member_chat_meta.dict())
+            member_chat_ref.set(creator_chat_meta.dict())
     finally:
-        return chat_meta
+        return creator_chat_meta
 
 
 def create_chat(database, members, chat_name: str = uuid4()) -> Union[ChatMeta, None]:
@@ -116,6 +124,7 @@ def create_chat(database, members, chat_name: str = uuid4()) -> Union[ChatMeta, 
         )
         update_time, chat_ref = database.collection('chats').add(chat.dict())
         chat_meta = ChatMeta(
+            chat_name=chat_name,
             chat_id=chat_ref.id,
             created_at=chat.created_at
         )

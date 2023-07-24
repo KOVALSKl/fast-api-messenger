@@ -51,6 +51,7 @@ async def get_all_user_chats(request: Request):
 
         user_chats = []
         for chat in user_ref.collection('chats').stream():
+            # подумай как изменить это
             chat_model = chat.to_dict()
             user_chats.append(chat_model)
         return JSONResponse(content={'chats': user_chats}, status_code=200)
