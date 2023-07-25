@@ -192,7 +192,6 @@ async def send_message(user: BaseUserModel, chat_id, message_content):
 
     return JSONResponse(content={'message': message_ref.id}, status_code=200)
 
-
 @router.websocket("/{chat_id}/ws")
 async def send_message_to(websocket: WebSocket, chat_id: str, auth_token: str):
     await websocket_manager.connect(websocket)

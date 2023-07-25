@@ -1,14 +1,13 @@
 from fastapi.exceptions import HTTPException
-from fastapi import Request
-from fastapi.responses import JSONResponse
+from fastapi import Request, WebSocket, WebSocketException
 from passlib.context import CryptContext
 from datetime import datetime, timedelta
 
-from database.models import BaseUserModel, Chat, ChatMeta, Notification, Token, NotificationType, Message
+from database.models import BaseUserModel, Chat, ChatMeta, Notification, Token, NotificationType, Message, MessageType
 from config import Configuration
 
 from jose import JWTError, jwt, ExpiredSignatureError
-from typing import Union
+from typing import Union, Optional
 from uuid import uuid4
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -204,3 +203,72 @@ async def send_message(database, user: BaseUserModel, chat_id: str, message: Mes
     update_time, message_ref = chat_ref.collection('messages').add(message.dict())
 
     return message_ref.id
+
+
+async def send_notification(database, user: BaseUserModel, notification: Notification, websocket: Optional[WebSocket]):
+    user_ref = root_collection_item_exist(database, 'users', user.login)
+
+    if not user_ref:
+        return HTTPException(detail={'message': f"Пользователь не авторизован"}, status_code=401)
+
+    user_ref.collection('notifications').add(notification.dict())
+
+    if websocket:
+        all_user_notifications = []
+        for note in user_ref.collection('notifications').stream():
+            all_user_notifications.append(note)
+
+        await websocket.send_json({
+            'type': MessageType.NOTIFICATION,
+            'message': {
+                'data': all_user_notifications,
+            }
+        })
+
+
+async def send_message(database, user: BaseUserModel, chat_id: str, message: Message, websocket: Optional[WebSocket]):
+    user_ref = root_collection_item_exist(database, 'users', user.login)
+    chat_ref = root_collection_item_exist(database, 'chats', chat_id)
+
+    if not user_ref:
+        raise HTTPException(detail={'message': f"Пользователь не авторизован"}, status_code=401)
+
+    if not chat_ref:
+        raise HTTPException(detail={'message': f"Чата {chat_id} не существует"}, status_code=400)
+
+    chat_doc = chat_ref.get()
+    chat_model = Chat(**chat_doc.to_dict())
+
+    if user.login not in chat_model.members:
+        return HTTPException(detail={'message': f"Нет доступа к чату"}, status_code=403)
+
+    notification = Notification(
+        type=NotificationType.MESSAGE,
+        description=f'Пользователь {user.login} отправил сообщение',
+        user=user.login,
+        chat_id=chat_id
+    )
+
+    update_time, message_ref = chat_ref.collection('messages').add(message.dict())
+
+    for member_login in chat_model.members:
+        member_ref = root_collection_item_exist(member_login)
+
+        if not member_ref:
+            raise HTTPException(detail={'message': f"Пользователь не существует"}, status_code=400)
+
+        member_model = BaseUserModel(**member_ref.get().to_dict())
+
+        if websocket:
+            all_user_notifications = []
+            for note in user_ref.collection('notifications').stream():
+                all_user_notifications.append(note)
+
+            await websocket.send_json({
+                'type': MessageType.NOTIFICATION,
+                'message': {
+                    'data': all_user_notifications,
+                }
+            })
+
+        await send_notification(database, member_model, notification, websocket)

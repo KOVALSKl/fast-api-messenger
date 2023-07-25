@@ -9,6 +9,18 @@ from enum import Enum, IntEnum
 from lib import send_message
 from database import DataBaseConnector
 
+
+class MessageType(IntEnum, Enum):
+    MESSAGE = 0,
+    NOTIFICATION = 1,
+
+
+class MessageActionType(IntEnum, Enum):
+    DELETE = 0,
+    SEND = 1,
+    EDIT = 2,
+
+
 class Role(IntEnum, Enum):
     USER = 1,
     ADMIN = 2
