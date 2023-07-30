@@ -34,7 +34,7 @@ app.add_middleware(
    allow_methods=allow_all,
    allow_headers=allow_all
 )
-app.add_middleware(AuthTokenExist)
+#app.add_middleware(AuthTokenExist)
 
 connection = DataBaseConnector()
 database = connection.db

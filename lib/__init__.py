@@ -3,12 +3,14 @@ from fastapi import Request, WebSocket, WebSocketException
 from passlib.context import CryptContext
 from datetime import datetime, timedelta
 
-from database.models import BaseUserModel, Chat, ChatMeta, Notification, Token, NotificationType, Message, MessageType
+from database.models import *
 from config import Configuration
 
 from jose import JWTError, jwt, ExpiredSignatureError
 from typing import Union, Optional
 from uuid import uuid4
+
+websocket_manager = WebSocketManager()
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 config = Configuration()
@@ -83,7 +85,7 @@ def create_dialog(database, creator_ref, member_ref) -> Union[ChatMeta, None]:
     member_chat_ref = member_ref.collection('chats').document(creator_model.login)
     member_chat_doc = member_chat_ref.get()
 
-    chat_meta = None
+    creator_chat_meta = None
 
     try:
         if creator_chat_doc.exists and member_chat_doc.exists:
@@ -135,140 +137,70 @@ def create_chat(database, members, chat_name: str = uuid4()) -> Union[ChatMeta, 
         return chat_meta
 
 
-def send_notification_to_chat_members(
-        database,
-        chat: Chat,
-        sender_login,
-        notification: Notification):
-    for member in chat.members:
-        if member != sender_login:
-            member_ref = root_collection_item_exist(database, 'users', member)
-            if member_ref:
-                member_ref.collection('notifications').add(notification.dict())
+def get_token_from_request(request: Request) -> str:
+    """
+    Получение токена из заголовка Authorization в запросе
+    :param request: Объект запроса
+    :return: Возвращает строку токена
+    """
+    token = request.headers.get('Authorization').split()[1]
+    return token
 
 
-def get_user_from_token(request: Request) -> Union[BaseUserModel, None]:
+def get_user_from_token(token: str) -> Union[BaseUserModel, None]:
+    """
+    Получение пользователя из JWT токена
+    :param token: JWT токен
+    :return: Возвращает модель пользователя или None
+    """
+    user = None
     try:
-        user = None
+        decoded_jwt = jwt.decode(token, JWT_HASH_KEY, algorithms=CRYPT_ALGORITHM)
+        user = BaseUserModel.parse_obj(decoded_jwt)
 
-        token = request.headers.get('Authorization').split()[1]
-        user = BaseUserModel.parse_obj(jwt.decode(token, JWT_HASH_KEY, algorithms=CRYPT_ALGORITHM))
-
-    except (JWTError, ExpiredSignatureError, KeyError):
+    except (JWTError, ExpiredSignatureError):
         raise HTTPException(detail={'message': 'Пользователь не авторизован'}, status_code=401)
     finally:
         return user
 
 
-async def send_message(database, user: BaseUserModel, chat_id: str, message: Message):
+async def send_websocket_message(chat_ref, message: Message, websocket: Optional[WebSocket]):
     """
-    Сохраняет отправленное сообщение в базе данных
-    :param database: Объект базы данных
-    :param user: Объект пользователя
-    :param chat_id: Идентификатор чата
-    :param message: Сообщение
+    Сохраняет сообщение в коллекции чата, а также, если передан объект websocket - отправляет
+    созданное сообщение пользователю
+    :param chat_ref: Ссылка на документ чата в базе данных
+    :param message: Объект сообщения
+    :param websocket: Объект соединения websocket с пользователем
     :return:
     """
+    sent_message_info = chat_ref.collection('messages').add(message.dict())
 
-    if not user:
-        return HTTPException(detail={'message': f"Пользователь не авторизован"}, status_code=401)
-
-    user_ref = root_collection_item_exist(database, 'users', user.login)
-    chat_ref = root_collection_item_exist(database, 'chats', chat_id)
-
-    if not user_ref:
-        raise HTTPException(detail={'message': f"Пользователя {user.login} не существует"}, status_code=401)
-
-    if not chat_ref:
-        raise HTTPException(detail={'message': f"Чата {chat_id} не существует"}, status_code=400)
-
-    chat_doc = chat_ref.get()
-    chat_model = Chat(**chat_doc.to_dict())
-
-    if user.login not in chat_model.members:
-        return HTTPException(detail={'message': f"Нет доступа к чату"}, status_code=403)
-
-    send_notification_to_chat_members(
-        database,
-        chat_model,
-        user.login,
-        Notification(
-            type=NotificationType.MESSAGE,
-            description=f'Пользователь {user.login} отправил сообщение',
-            user=user.login,
-            chat_id=chat_id
-        )
+    websocket_message = WebSocketMessage(
+        type=MessageType.MESSAGE,
+        content=message
     )
-
-    update_time, message_ref = chat_ref.collection('messages').add(message.dict())
-
-    return message_ref.id
-
-
-async def send_notification(database, user: BaseUserModel, notification: Notification, websocket: Optional[WebSocket]):
-    user_ref = root_collection_item_exist(database, 'users', user.login)
-
-    if not user_ref:
-        return HTTPException(detail={'message': f"Пользователь не авторизован"}, status_code=401)
-
-    user_ref.collection('notifications').add(notification.dict())
 
     if websocket:
-        all_user_notifications = []
-        for note in user_ref.collection('notifications').stream():
-            all_user_notifications.append(note)
-
-        await websocket.send_json({
-            'type': MessageType.NOTIFICATION,
-            'message': {
-                'data': all_user_notifications,
-            }
-        })
+        await websocket.send_json(websocket_message.dict())
+    return sent_message_info
 
 
-async def send_message(database, user: BaseUserModel, chat_id: str, message: Message, websocket: Optional[WebSocket]):
-    user_ref = root_collection_item_exist(database, 'users', user.login)
-    chat_ref = root_collection_item_exist(database, 'chats', chat_id)
+async def send_websocket_notification(user_ref, notification: Notification, websocket: Optional[WebSocket]):
+    """
+    Сохраняет уведомление в коллекции уведомлений пользователя, а также, если передан объект websocket - отправляет
+    созданное уведомление пользователю
+    :param user_ref: Ссылка на документ пользователя в базе данных
+    :param notification: Объект уведомления
+    :param websocket: Объект соединения websocket с пользователем
+    :return:
+    """
+    sent_notification_info = user_ref.collection('notifications').add(notification.dict())
 
-    if not user_ref:
-        raise HTTPException(detail={'message': f"Пользователь не авторизован"}, status_code=401)
-
-    if not chat_ref:
-        raise HTTPException(detail={'message': f"Чата {chat_id} не существует"}, status_code=400)
-
-    chat_doc = chat_ref.get()
-    chat_model = Chat(**chat_doc.to_dict())
-
-    if user.login not in chat_model.members:
-        return HTTPException(detail={'message': f"Нет доступа к чату"}, status_code=403)
-
-    notification = Notification(
-        type=NotificationType.MESSAGE,
-        description=f'Пользователь {user.login} отправил сообщение',
-        user=user.login,
-        chat_id=chat_id
+    websocket_message = WebSocketMessage(
+        type=MessageType.NOTIFICATION,
+        content=notification
     )
 
-    update_time, message_ref = chat_ref.collection('messages').add(message.dict())
-
-    for member_login in chat_model.members:
-        member_ref = root_collection_item_exist(member_login)
-
-        if not member_ref:
-            raise HTTPException(detail={'message': f"Пользователь не существует"}, status_code=400)
-
-        member_model = BaseUserModel(**member_ref.get().to_dict())
-
-        if websocket:
-            all_user_notifications = []
-            for note in user_ref.collection('notifications').stream():
-                all_user_notifications.append(note)
-
-            await websocket.send_json({
-                'type': MessageType.NOTIFICATION,
-                'message': {
-                    'data': all_user_notifications,
-                }
-            })
-
-        await send_notification(database, member_model, notification, websocket)
+    if websocket:
+        await websocket.send_json(websocket_message.dict())
+    return sent_notification_info

@@ -27,6 +27,8 @@ class AuthTokenExist(BaseHTTPMiddleware):
         self, request: Request, call_next: RequestResponseEndpoint
     ):
         try:
+            endpoint = request.url.path
+            print(endpoint)
             token = request.headers["Authorization"].split()[1]
             payload = jwt.decode(
                 token,

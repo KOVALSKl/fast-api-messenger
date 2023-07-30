@@ -5,8 +5,6 @@ from pydantic import BaseModel, EmailStr, PrivateAttr
 from typing import Optional, Any, List, Union, Dict
 import datetime
 from enum import Enum, IntEnum
-
-from lib import send_message
 from database import DataBaseConnector
 
 
@@ -116,6 +114,11 @@ class Endpoint:
         self.endpoint = endpoint
 
 
+class WebSocketMessage(BaseModel):
+    type: MessageType
+    content: Union[Message, Notification]
+
+
 class WebSocketManager:
 
     def __new__(cls):
@@ -126,6 +129,14 @@ class WebSocketManager:
     def __init__(self):
         self.opened_connections: Dict[str, WebSocket] = []
         self.database = DataBaseConnector().db
+
+    def __getitem__(self, item: str):
+        """
+        Возвращает пользователя из списка активных подключений
+        :param item: Логин пользователя по которому берем соединение
+        :return:
+        """
+        return self.opened_connections[item]
 
     async def connect(self, user: BaseUserModel, websocket: WebSocket):
         await websocket.accept()
@@ -138,18 +149,6 @@ class WebSocketManager:
             del self.opened_connections[user.login]
         except KeyError:
             raise HTTPException(detail={'message': 'Соединения не существовало'})
-
-    async def send_message_to_user(self, message: Message, user: BaseUserModel, chat_id: int):
-        try:
-            receiver = self.opened_connections[user.login]
-            await receiver.send_json(message.dict())
-            await send_message(self.database, user, chat_id, message)
-        except KeyError:
-            # проверить существование пользователя в бд
-            # если он есть отправить ему сообщение и нотификейшон
-            pass
-        except WebSocketException:
-            raise HTTPException(detail={'message': 'Проблема с соединением'})
 
     async def send_notification_to_all_users(self, notification: Notification):
         for connection in self.opened_connections.values():
