@@ -158,6 +158,7 @@ async def message_websocket_communication(chat_id: str, websocket: WebSocket):
             raise HTTPException(detail={'message': 'Не удалось установить соединение'}, status_code=400)
 
         await websocket_manager.connect(websocket)
+        print('user connected')
         received_message_json = await websocket.receive_json()
         received_message_obj = ReceivedWebSocketMessage(**json.loads(received_message_json))
 
@@ -189,6 +190,8 @@ async def message_websocket_communication(chat_id: str, websocket: WebSocket):
         )
 
         await websocket.send_json(websocket_message)
-
+    except WebSocketDisconnect:
+        websocket_manager.disconnect(websocket)
+        print('user disconnected')
     except Exception as err:
         return HTTPException(detail={'message': f"{err}"}, status_code=500)
