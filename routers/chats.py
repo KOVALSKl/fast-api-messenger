@@ -144,7 +144,8 @@ async def create_chat(request: Request, members_login: List[str], chat_name: str
 
 
 @router.websocket('/{chat_id}/ws/message')
-async def message_websocket_communication(chat_id: str, websocket: WebSocket):
+async def message_websocket_communication(websocket: WebSocket, chat_id: str):
+    print(chat_id)
     try:
         chat_ref = lib.root_collection_item_exist(database, 'chats', chat_id)
 
