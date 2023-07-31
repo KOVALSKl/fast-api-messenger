@@ -119,6 +119,11 @@ class WebSocketMessage(BaseModel):
     content: Union[Message, Notification]
 
 
+class ReceivedWebSocketMessage(BaseModel):
+    message: WebSocketMessage
+    auth_token: str
+
+
 class WebSocketManager:
 
     def __new__(cls):
@@ -136,7 +141,10 @@ class WebSocketManager:
         :param item: Логин пользователя по которому берем соединение
         :return:
         """
-        return self.opened_connections[item]
+        if item in self.opened_connections:
+            return self.opened_connections[item]
+        else:
+            return None
 
     async def connect(self, user: BaseUserModel, websocket: WebSocket):
         await websocket.accept()

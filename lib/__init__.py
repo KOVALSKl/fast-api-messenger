@@ -187,7 +187,7 @@ async def send_websocket_message(chat_ref, message: models.Message, websocket: O
 
     if websocket:
         await websocket.send_json(websocket_message.dict())
-    return sent_message_info
+    return websocket_message
 
 
 async def send_websocket_notification(user_ref, notification: models.Notification, websocket: Optional[WebSocket]):

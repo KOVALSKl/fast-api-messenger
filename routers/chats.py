@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import HTTPException
 
 import lib
+import json
 from database import DataBaseConnector
 from database.models import *
 from typing import List
@@ -77,13 +78,13 @@ async def get_user_chat(request: Request, chat_id: str):
             return HTTPException(detail={'message': f"Пользователь не существует"}, status_code=400)
 
         if not chat_ref:
-            return HTTPException(detail={'message': f"The chat {chat_id} doesn't exist"}, status_code=404)
+            return HTTPException(detail={'message': f"Чата {chat_id} не существует"}, status_code=404)
 
         chat_dict = chat_ref.get().to_dict()
         chat_model = Chat(**chat_dict)
 
         if user.login not in chat_model.members:
-            return HTTPException(detail={'message': f"The user {user.login} is not a chat member"},
+            return HTTPException(detail={'message': f"Пользователь {user.login} не является участником чата"},
                                  status_code=403)
 
         return JSONResponse(content=chat_dict, status_code=200)
@@ -118,7 +119,7 @@ async def create_chat(request: Request, members_login: List[str], chat_name: str
         for member in chat_members_login:
             member_ref = lib.root_collection_item_exist(database, 'users', member)
             if not member_ref:
-                return HTTPException(detail={'message': f"The user {member} doesn't exist"}, status_code=404)
+                return HTTPException(detail={'message': f"Пользователь {member} не существует"}, status_code=404)
 
         if len(chat_members_login) == 1:
             member_ref = lib.root_collection_item_exist(database, 'users', members_login[0])
@@ -142,6 +143,52 @@ async def create_chat(request: Request, members_login: List[str], chat_name: str
         return HTTPException(detail={'message': f"{err}"}, status_code=500)
 
 
-# router.websocket('/{chat_id}/ws/message')
-# async def message_websocket_communication(websocket: WebSocket):
-#     pass
+@router.websocket('/{chat_id}/ws/message')
+async def message_websocket_communication(chat_id: str, websocket: WebSocket):
+    try:
+        chat_ref = lib.root_collection_item_exist(database, 'chats', chat_id)
+
+        if not chat_ref:
+            raise HTTPException(detail={'message': f"Чата {chat_id} не существует"}, status_code=404)
+
+        chat_doc_obj = (chat_ref.get()).to_dict()
+        chat_model = Chat(**chat_doc_obj)
+
+        if not websocket:
+            raise HTTPException(detail={'message': 'Не удалось установить соединение'}, status_code=400)
+
+        await websocket_manager.connect(websocket)
+        received_message_json = await websocket.receive_json()
+        received_message_obj = ReceivedWebSocketMessage(**json.loads(received_message_json))
+
+        user_model = lib.get_user_from_token(received_message_obj.auth_token)
+
+        user_ref = lib.root_collection_item_exist(database, 'users', user_model.login)
+
+        if not user_ref:
+            return HTTPException(detail={'message': f"Пользователь не авторизован"}, status_code=401)
+
+        if user_model not in chat_model.members:
+            return HTTPException(detail={'message': f"Пользователь {user_model.login} не является участником чата"},
+                                 status_code=403)
+
+        for member in chat_model.members:
+            if user_model.login == member:
+                continue
+            member_ref = lib.root_collection_item_exist(database, 'users', member)
+            member_doc_obj = (member_ref.get()).to_dict()
+            member_model = BaseUserModel(**member_doc_obj)
+
+            member_connection = websocket_manager[member_model.login]
+            if type(received_message_obj.message) == Message:
+                await lib.send_websocket_message(chat_ref, received_message_obj.message, member_connection)
+
+        websocket_message = WebSocketMessage(
+            type=MessageType.MESSAGE,
+            message=received_message_obj.message,
+        )
+
+        await websocket.send_json(websocket_message)
+
+    except Exception as err:
+        return HTTPException(detail={'message': f"{err}"}, status_code=500)
