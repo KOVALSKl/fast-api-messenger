@@ -152,7 +152,7 @@ class WebSocketManager:
             {user.login: websocket}
         )
 
-    def disconnect(self, user: BaseUserModel, websocket: WebSocket):
+    def disconnect(self, user: BaseUserModel):
         try:
             del self.opened_connections[user.login]
         except KeyError:

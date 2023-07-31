@@ -144,13 +144,18 @@ async def create_chat(request: Request, members_login: List[str], chat_name: str
 
 
 @router.websocket('/{chat_id}/ws/message')
-async def message_websocket_communication(websocket: WebSocket, chat_id: str):
-    print(chat_id)
+async def message_websocket_communication(websocket: WebSocket, chat_id: str, auth_token: str):
     try:
         chat_ref = lib.root_collection_item_exist(database, 'chats', chat_id)
 
+        user_model = lib.get_user_from_token(auth_token)
+        user_ref = lib.root_collection_item_exist(database, 'users', user_model.login)
+
         if not chat_ref:
             raise HTTPException(detail={'message': f"Чата {chat_id} не существует"}, status_code=404)
+
+        if not user_ref:
+            return HTTPException(detail={'message': f"Пользователь не авторизован"}, status_code=401)
 
         chat_doc_obj = (chat_ref.get()).to_dict()
         chat_model = Chat(**chat_doc_obj)
@@ -158,41 +163,35 @@ async def message_websocket_communication(websocket: WebSocket, chat_id: str):
         if not websocket:
             raise HTTPException(detail={'message': 'Не удалось установить соединение'}, status_code=400)
 
-        await websocket_manager.connect(websocket)
+        await websocket_manager.connect(user_model, websocket)
         print('user connected')
-        received_message_json = await websocket.receive_json()
-        received_message_obj = ReceivedWebSocketMessage(**json.loads(received_message_json))
+        while True:
+            received_message_json = await websocket.receive_json()
+            received_message_obj = ReceivedWebSocketMessage(**json.loads(received_message_json))
 
-        user_model = lib.get_user_from_token(received_message_obj.auth_token)
+            if user_model not in chat_model.members:
+                return HTTPException(detail={'message': f"Пользователь {user_model.login} не является участником чата"},
+                                     status_code=403)
 
-        user_ref = lib.root_collection_item_exist(database, 'users', user_model.login)
+            for member in chat_model.members:
+                if user_model.login == member:
+                    continue
+                member_ref = lib.root_collection_item_exist(database, 'users', member)
+                member_doc_obj = (member_ref.get()).to_dict()
+                member_model = BaseUserModel(**member_doc_obj)
 
-        if not user_ref:
-            return HTTPException(detail={'message': f"Пользователь не авторизован"}, status_code=401)
+                member_connection = websocket_manager[member_model.login]
+                if type(received_message_obj.message) == Message:
+                    await lib.send_websocket_message(chat_ref, received_message_obj.message, member_connection)
 
-        if user_model not in chat_model.members:
-            return HTTPException(detail={'message': f"Пользователь {user_model.login} не является участником чата"},
-                                 status_code=403)
+            websocket_message = WebSocketMessage(
+                type=MessageType.MESSAGE,
+                message=received_message_obj.message,
+            )
 
-        for member in chat_model.members:
-            if user_model.login == member:
-                continue
-            member_ref = lib.root_collection_item_exist(database, 'users', member)
-            member_doc_obj = (member_ref.get()).to_dict()
-            member_model = BaseUserModel(**member_doc_obj)
-
-            member_connection = websocket_manager[member_model.login]
-            if type(received_message_obj.message) == Message:
-                await lib.send_websocket_message(chat_ref, received_message_obj.message, member_connection)
-
-        websocket_message = WebSocketMessage(
-            type=MessageType.MESSAGE,
-            message=received_message_obj.message,
-        )
-
-        await websocket.send_json(websocket_message)
+            await websocket.send_json(websocket_message)
     except WebSocketDisconnect:
-        websocket_manager.disconnect(websocket)
+        websocket_manager.disconnect(user_model)
         print('user disconnected')
     except Exception as err:
         return HTTPException(detail={'message': f"{err}"}, status_code=500)
