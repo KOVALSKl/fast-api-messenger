@@ -3,14 +3,17 @@ from fastapi import Request, WebSocket, WebSocketException
 from passlib.context import CryptContext
 from datetime import datetime, timedelta
 
-from database.models import *
+# from database.models import BaseUserModel, Chat, ChatMeta, \
+#     Notification, Token, MessageType, Message, WebSocketManager, WebSocketMessage
 from config import Configuration
 
 from jose import JWTError, jwt, ExpiredSignatureError
 from typing import Union, Optional
 from uuid import uuid4
 
-websocket_manager = WebSocketManager()
+import database.models as models
+
+websocket_manager = models.WebSocketManager()
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 config = Configuration()
@@ -56,7 +59,7 @@ def get_password_hash(password: str):
     return pwd_context.hash(password)
 
 
-def create_access_token(user: BaseUserModel, expires_delta: timedelta = timedelta(days=1)):
+def create_access_token(user: models.BaseUserModel, expires_delta: timedelta = timedelta(days=1)):
     """
     Создание JWT токена для авторизации пользователя
     :param user: Пользователь
@@ -65,19 +68,21 @@ def create_access_token(user: BaseUserModel, expires_delta: timedelta = timedelt
     """
 
     user_dict = user.dict()
-    expires = (datetime.utcnow() + expires_delta).strftime("%a, %d %b %Y %H:%M:%S GMT")
+    expires = datetime.utcnow()
+    expires = (expires + expires_delta).strftime("%a, %d %b %Y %H:%M:%S GMT")
+    # expires = (datetime.utcnow() + expires_delta).strftime("%a, %d %b %Y %H:%M:%S GMT")
     user_dict.update({'expires': expires})
     encoded_jwt = jwt.encode(user_dict, config['keys']['jwt'],
                              algorithm=config['crypt_settings']['algorithm'])
 
-    token = Token(access_token=encoded_jwt, token_type='Bearer', expires=expires)
+    token = models.Token(access_token=encoded_jwt, token_type='Bearer', expires=expires)
 
     return token
 
 
-def create_dialog(database, creator_ref, member_ref) -> Union[ChatMeta, None]:
-    creator_model = BaseUserModel(**creator_ref.get().to_dict())
-    member_model = BaseUserModel(**member_ref.get().to_dict())
+def create_dialog(database, creator_ref, member_ref) -> Union[models.ChatMeta, None]:
+    creator_model = models.BaseUserModel(**creator_ref.get().to_dict())
+    member_model = models.BaseUserModel(**member_ref.get().to_dict())
 
     creator_chat_ref = creator_ref.collection('chats').document(member_model.login)
     creator_chat_doc = creator_chat_ref.get()
@@ -91,20 +96,20 @@ def create_dialog(database, creator_ref, member_ref) -> Union[ChatMeta, None]:
         if creator_chat_doc.exists and member_chat_doc.exists:
             raise HTTPException(detail={'message': 'Диалог существует'}, status_code=400)
         else:
-            chat = Chat(
+            chat = models.Chat(
                 members=[creator_model.login, member_model.login],
                 messages=[],
             )
 
             update_time, chat_ref = database.collection('chats').add(chat.dict())
 
-            member_chat_meta = ChatMeta(
+            member_chat_meta = models.ChatMeta(
                 chat_name=creator_model.login,
                 chat_id=chat_ref.id,
                 created_at=chat.created_at,
             )
 
-            creator_chat_meta = ChatMeta(
+            creator_chat_meta = models.ChatMeta(
                 chat_name=member_model.login,
                 chat_id=chat_ref.id,
                 created_at=chat.created_at
@@ -115,16 +120,16 @@ def create_dialog(database, creator_ref, member_ref) -> Union[ChatMeta, None]:
         return creator_chat_meta
 
 
-def create_chat(database, members, chat_name: str = uuid4()) -> Union[ChatMeta, None]:
+def create_chat(database, members, chat_name: str = uuid4()) -> Union[models.ChatMeta, None]:
 
     chat_meta = None
     try:
-        chat = Chat(
+        chat = models.Chat(
             members=members,
             chat_name=chat_name
         )
         update_time, chat_ref = database.collection('chats').add(chat.dict())
-        chat_meta = ChatMeta(
+        chat_meta = models.ChatMeta(
             chat_name=chat_name,
             chat_id=chat_ref.id,
             created_at=chat.created_at
@@ -147,7 +152,7 @@ def get_token_from_request(request: Request) -> str:
     return token
 
 
-def get_user_from_token(token: str) -> Union[BaseUserModel, None]:
+def get_user_from_token(token: str) -> Union[models.BaseUserModel, None]:
     """
     Получение пользователя из JWT токена
     :param token: JWT токен
@@ -156,7 +161,7 @@ def get_user_from_token(token: str) -> Union[BaseUserModel, None]:
     user = None
     try:
         decoded_jwt = jwt.decode(token, JWT_HASH_KEY, algorithms=CRYPT_ALGORITHM)
-        user = BaseUserModel.parse_obj(decoded_jwt)
+        user = models.BaseUserModel.parse_obj(decoded_jwt)
 
     except (JWTError, ExpiredSignatureError):
         raise HTTPException(detail={'message': 'Пользователь не авторизован'}, status_code=401)
@@ -164,7 +169,7 @@ def get_user_from_token(token: str) -> Union[BaseUserModel, None]:
         return user
 
 
-async def send_websocket_message(chat_ref, message: Message, websocket: Optional[WebSocket]):
+async def send_websocket_message(chat_ref, message: models.Message, websocket: Optional[WebSocket]):
     """
     Сохраняет сообщение в коллекции чата, а также, если передан объект websocket - отправляет
     созданное сообщение пользователю
@@ -175,8 +180,8 @@ async def send_websocket_message(chat_ref, message: Message, websocket: Optional
     """
     sent_message_info = chat_ref.collection('messages').add(message.dict())
 
-    websocket_message = WebSocketMessage(
-        type=MessageType.MESSAGE,
+    websocket_message = models.WebSocketMessage(
+        type=models.MessageType.MESSAGE,
         content=message
     )
 
@@ -185,7 +190,7 @@ async def send_websocket_message(chat_ref, message: Message, websocket: Optional
     return sent_message_info
 
 
-async def send_websocket_notification(user_ref, notification: Notification, websocket: Optional[WebSocket]):
+async def send_websocket_notification(user_ref, notification: models.Notification, websocket: Optional[WebSocket]):
     """
     Сохраняет уведомление в коллекции уведомлений пользователя, а также, если передан объект websocket - отправляет
     созданное уведомление пользователю
@@ -196,8 +201,8 @@ async def send_websocket_notification(user_ref, notification: Notification, webs
     """
     sent_notification_info = user_ref.collection('notifications').add(notification.dict())
 
-    websocket_message = WebSocketMessage(
-        type=MessageType.NOTIFICATION,
+    websocket_message = models.WebSocketMessage(
+        type=models.MessageType.NOTIFICATION,
         content=notification
     )
 
