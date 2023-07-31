@@ -218,8 +218,11 @@ class ConnectionManager:
     def disconnect(self, user_login: str, websocket: WebSocket):
         del self.active_connections[user_login]
 
-    async def send_personal_message(self, friend_login:str, message: str, websocket: WebSocket):
-        await self.active_connections[friend_login].send_text(message)
+    async def send_personal_message(self, friend_login: str, message: str, websocket: WebSocket):
+        try:
+            await self.active_connections[friend_login].send_text(message)
+        except KeyError:
+            await websocket.send_text(f'Пользователь {friend_login} не в сети')
 
     async def broadcast(self, message: str):
         for ws_connection in self.active_connections.values():
@@ -229,13 +232,13 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
-@app.websocket('/ws/{client_login}')
+@app.websocket('/ws/{client_login}/{user_login}')
 async def websocket_endpoint(websocket: WebSocket, client_login: str, user_login: str):
     await manager.connect(user_login, websocket)
     try:
         while True:
             data = await websocket.receive_text()
-            await manager.send_personal_message(client_login, f"Client {user_login} send you: {data}")
+            await manager.send_personal_message(client_login, f"Client {user_login} send you: {data}", websocket)
     except WebSocketDisconnect:
         manager.disconnect(user_login, websocket)
         await manager.broadcast(f"Client {user_login} left the chat")
