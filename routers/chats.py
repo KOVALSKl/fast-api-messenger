@@ -145,6 +145,8 @@ async def create_chat(request: Request, members_login: List[str], chat_name: str
 
 @router.websocket('/{chat_id}/ws/message')
 async def message_websocket_communication(websocket: WebSocket, chat_id: str, auth_token: str):
+    user_model = None
+
     try:
         chat_ref = lib.root_collection_item_exist(database, 'chats', chat_id)
 
@@ -164,7 +166,7 @@ async def message_websocket_communication(websocket: WebSocket, chat_id: str, au
             raise HTTPException(detail={'message': 'Не удалось установить соединение'}, status_code=400)
 
         await websocket_manager.connect(user_model, websocket)
-        print('user connected')
+
         while True:
             received_message_json = await websocket.receive_json()
             received_message_obj = ReceivedWebSocketMessage(**json.loads(received_message_json))
@@ -192,6 +194,5 @@ async def message_websocket_communication(websocket: WebSocket, chat_id: str, au
             await websocket.send_json(websocket_message)
     except WebSocketDisconnect:
         websocket_manager.disconnect(user_model)
-        print('user disconnected')
     except Exception as err:
         return HTTPException(detail={'message': f"{err}"}, status_code=500)
