@@ -143,7 +143,7 @@ async def create_chat(request: Request, members_login: List[str], chat_name: str
         return HTTPException(detail={'message': f"{err}"}, status_code=500)
 
 
-@router.websocket_route('/{chat_id}/ws/message')
+@router.websocket('/{chat_id}/ws/message')
 async def test_message_echo(websocket: WebSocket, chat_id: str, auth_token):
     user_model = lib.get_user_from_token(auth_token)
     user_ref = lib.root_collection_item_exist(database, 'users', user_model.login)
