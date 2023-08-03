@@ -162,7 +162,7 @@ async def test_message_echo(websocket: WebSocket, chat_id: str, auth_token):
     chat_doc_obj = (chat_ref.get()).to_dict()
     chat_model = Chat(**chat_doc_obj)
 
-    await websocket_manager.connect(user_model.login, websocket)
+    await websocket_manager.connect(user_model, websocket)
 
     try:
         while True:

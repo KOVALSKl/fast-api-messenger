@@ -132,7 +132,7 @@ class WebSocketManager:
         return cls.instance
 
     def __init__(self):
-        self.opened_connections: Dict[str, WebSocket] = []
+        self.opened_connections: Dict[str, WebSocket] = {}
         self.database = DataBaseConnector().db
 
     def __getitem__(self, item: str):
