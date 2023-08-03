@@ -116,7 +116,7 @@ class Endpoint:
 
 class WebSocketMessage(BaseModel):
     type: MessageType
-    content: Union[Message, Notification]
+    content: str
 
 
 class ReceivedWebSocketMessage(BaseModel):
