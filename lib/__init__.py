@@ -178,8 +178,6 @@ async def send_websocket_message(chat_ref, message: models.Message, websocket: O
     :param websocket: Объект соединения websocket с пользователем
     :return:
     """
-    sent_message_info = chat_ref.collection('messages').add(message.dict())
-
     websocket_message = models.WebSocketMessage(
         type=models.MessageType.MESSAGE,
         content=message

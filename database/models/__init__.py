@@ -1,4 +1,4 @@
-from fastapi import WebSocket, Request, WebSocketException
+from fastapi import WebSocket
 from fastapi.exceptions import HTTPException
 
 from pydantic import BaseModel, EmailStr, PrivateAttr
@@ -10,24 +10,12 @@ from database import DataBaseConnector
 
 class MessageType(IntEnum, Enum):
     MESSAGE = 0,
-    NOTIFICATION = 1,
-
-
-class MessageActionType(IntEnum, Enum):
-    DELETE = 0,
-    SEND = 1,
-    EDIT = 2,
+    UPDATEUSERSTATUS = 1,
 
 
 class Role(IntEnum, Enum):
     USER = 1,
     ADMIN = 2
-
-
-class NotificationType(IntEnum, Enum):
-    MESSAGE = 1,
-    FOLLOWER = 2,
-    POST = 3
 
 
 class RequestMethods(Enum):
@@ -53,6 +41,11 @@ class User(BaseModel):
 class BaseUserModel(User):
     role: Role = Role.USER
     password: str
+
+
+class UserStatus(BaseModel):
+    chat_id: str
+    auth_token: str
 
 
 class Post(BaseModel):
@@ -92,16 +85,7 @@ class ChatMeta(BaseModel):
     created_at: str
 
 
-class ChatResponse(Chat):
-    messages: List[Message]
-
-
-class FollowsMeta(BaseModel):
-    created_at: str
-
-
 class Notification(BaseModel):
-    type: NotificationType
     description: str
     received_at: str = datetime.datetime.now().strftime('%d.%m.%Y %H:%M')
     user: str
@@ -116,12 +100,13 @@ class Endpoint:
 
 class WebSocketMessage(BaseModel):
     type: MessageType
-    content: str
+    content: Union[Message, UserStatus]
 
 
-class ReceivedWebSocketMessage(BaseModel):
-    message: WebSocketMessage
-    auth_token: str
+class OpenedConnection:
+    def __init__(self, connection: WebSocket, user_status: Union[UserStatus, None] = None):
+        self.connection = connection
+        self.user_status = user_status
 
 
 class WebSocketManager:
@@ -132,7 +117,7 @@ class WebSocketManager:
         return cls.instance
 
     def __init__(self):
-        self.opened_connections: Dict[str, WebSocket] = {}
+        self.opened_connections: Dict[str, OpenedConnection] = {}
         self.database = DataBaseConnector().db
 
     def __getitem__(self, item: str):
@@ -146,18 +131,24 @@ class WebSocketManager:
         else:
             return None
 
+    def update_user_status(self, user: BaseUserModel, status: UserStatus):
+        try:
+            self.opened_connections[user.login].user_status = status
+        except KeyError:
+            raise HTTPException(400, 'Пользователь не активен')
+
     async def connect(self, user: BaseUserModel, websocket: WebSocket):
         await websocket.accept()
         self.opened_connections.update(
-            {user.login: websocket}
+            {user.login: OpenedConnection(
+                connection=websocket,
+                user_status=None
+            )}
         )
 
     def disconnect(self, user: BaseUserModel):
         try:
             del self.opened_connections[user.login]
+            # в базу сохранять последнее время активности
         except KeyError:
-            raise HTTPException(detail={'message': 'Соединения не существовало'})
-
-    async def send_notification_to_all_users(self, notification: Notification):
-        for connection in self.opened_connections.values():
-            await connection.send_json(notification.dict())
+            raise HTTPException(400, 'Соединения не существовало')

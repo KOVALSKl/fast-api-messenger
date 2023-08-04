@@ -1,17 +1,14 @@
-from typing import List, Dict
-
-from fastapi import FastAPI, Depends, status, WebSocketDisconnect, WebSocket, WebSocketException
+from fastapi import FastAPI, Depends, status
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 
 from database.models import User, Subscription, BaseUserModel, Token, WebSocketManager
-from middlewares import AuthTokenExist
 from database import DataBaseConnector
 from config import Configuration
 
-from routers import posts, followers, following, chats
+from routers import posts, followers, following, chats, ws_communication
 from dependencies import authenticate_user, create_access_token, get_password_hash
 
 from lib import root_collection_item_exist
@@ -47,6 +44,7 @@ app.include_router(posts.router)
 app.include_router(followers.router)
 app.include_router(following.router)
 app.include_router(chats.router)
+app.include_router(ws_communication.router)
 
 
 @app.get('/{user_login}',
