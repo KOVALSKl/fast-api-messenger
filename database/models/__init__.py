@@ -44,7 +44,7 @@ class BaseUserModel(User):
 
 
 class UserStatus(BaseModel):
-    chat_id: str
+    chat_id: Union[str, None] = None
     auth_token: str
 
 
@@ -83,6 +83,10 @@ class ChatMeta(BaseModel):
     chat_name: str
     chat_id: str
     created_at: str
+
+
+class ChatModelResponse(Chat):
+    messages: List[Message]
 
 
 class Notification(BaseModel):
