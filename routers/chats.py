@@ -85,10 +85,8 @@ async def get_user_chat(request: Request, chat_id: str):
 
         messages = []
 
-        for message_id in chat_ref.collection('messages').stream():
-            message_ref = chat_ref.collection('messages').document(message_id)
-            message_obj = (message_ref.get()).to_dict()
-
+        for message_doc in chat_ref.collection('messages').stream():
+            message_obj = message_doc.to_dict()
             messages.append(message_obj)
 
         chat_dict.update({'messages': messages})
