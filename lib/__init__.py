@@ -169,22 +169,27 @@ def get_user_from_token(token: str) -> Union[models.BaseUserModel, None]:
         return user
 
 
-async def send_websocket_message(chat_ref, message: models.Message, websocket: Optional[WebSocket]):
+async def send_websocket_message(chat_id: str, message: models.Message, websocket: Optional[WebSocket]):
     """
     Сохраняет сообщение в коллекции чата, а также, если передан объект websocket - отправляет
     созданное сообщение пользователю
-    :param chat_ref: Ссылка на документ чата в базе данных
+    :param chat_id: Уникальный идентификатор чата
     :param message: Объект сообщения
     :param websocket: Объект соединения websocket с пользователем
     :return:
     """
     websocket_message = models.WebSocketMessage(
         type=models.MessageType.MESSAGE,
-        content=message
+        content=message,
+    )
+
+    response_message = models.ResponseMessage(
+        message=websocket_message,
+        chat_id=chat_id
     )
 
     if websocket:
-        await websocket.send_json(websocket_message.dict())
+        await websocket.send_json(response_message.dict())
     return websocket_message
 
 

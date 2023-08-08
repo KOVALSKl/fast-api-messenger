@@ -107,6 +107,11 @@ class WebSocketMessage(BaseModel):
     content: Union[Message, UserStatus]
 
 
+class ResponseMessage(BaseModel):
+    message: WebSocketMessage
+    chat_id: str
+
+
 class OpenedConnection:
     def __init__(self, connection: WebSocket, user_status: Union[UserStatus, None] = None):
         self.connection = connection

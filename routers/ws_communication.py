@@ -2,7 +2,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from fastapi.exceptions import HTTPException
 
 from database.models import DataBaseConnector, WebSocketManager, \
-    WebSocketMessage, MessageType, Message, UserStatus, Chat, BaseUserModel
+    WebSocketMessage, MessageType, Message, UserStatus, Chat, BaseUserModel, ResponseMessage
 from config import Configuration
 
 import lib
@@ -37,6 +37,7 @@ async def communication(websocket: WebSocket, auth_token):
 
     chat_ref = None
     chat_model = None
+    chat_id = None
 
     await websocket_manager.connect(user_model, websocket)
 
@@ -53,6 +54,7 @@ async def communication(websocket: WebSocket, auth_token):
 
                     chat_doc_obj = (chat_ref.get()).to_dict()
                     chat_model = Chat(**chat_doc_obj)
+                    chat_id = message_obj.content.chat_id
 
                     websocket_manager.update_user_status(user_model, message_obj.content)
             elif message_obj.type == MessageType.MESSAGE and chat_ref and chat_model:
@@ -64,15 +66,21 @@ async def communication(websocket: WebSocket, auth_token):
                         member_ref = lib.root_collection_item_exist(database, 'users', member)
                         member_doc_obj = (member_ref.get()).to_dict()
                         member_model = BaseUserModel(**member_doc_obj)
-                        print(member_model)
+
                         member_connection = websocket_manager[member_model.login]
                         if member_connection:
                             member_connection = member_connection.connection
 
-                        await lib.send_websocket_message(chat_ref, message, member_connection)
+                        websocket_message = await lib.send_websocket_message(chat_ref, message, member_connection)
 
                     sent_message_info = chat_ref.collection('messages').add(message.dict())
-                    await websocket.send_json(message.dict())
+
+                    response_message = ResponseMessage(
+                        message=websocket_message,
+                        chat_id=chat_id
+                    )
+
+                    await websocket.send_json(response_message.dict())
             else:
                 raise HTTPException(400, 'Невозможно обработать запрос')
 
