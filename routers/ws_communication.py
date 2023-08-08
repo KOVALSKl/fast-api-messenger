@@ -71,7 +71,7 @@ async def communication(websocket: WebSocket, auth_token):
                         if member_connection:
                             member_connection = member_connection.connection
 
-                        websocket_message = await lib.send_websocket_message(chat_ref, message, member_connection)
+                        websocket_message = await lib.send_websocket_message(chat_id, message, member_connection)
 
                     sent_message_info = chat_ref.collection('messages').add(message.dict())
 
