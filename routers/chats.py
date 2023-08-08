@@ -90,7 +90,7 @@ async def get_user_chat(request: Request, chat_id: str):
             message_obj = message_doc.to_dict()
             messages.append(message_obj)
 
-        messages.sort(key=lambda message: message['created_at'])
+        messages.sort(key=lambda message: message['created_at'], reverse=True)
 
         chat_dict.update({'messages': messages})
 
