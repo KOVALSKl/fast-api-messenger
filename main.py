@@ -47,6 +47,22 @@ app.include_router(chats.router)
 app.include_router(ws_communication.router)
 
 
+@app.get('/users')
+async def get_users():
+    try:
+        users = []
+
+        for user in database.collection('users').stream():
+            user_obj = user.to_dict()
+            user_model = BaseUserModel(**user_obj)
+
+            users.append(user_model.dict())
+
+        return JSONResponse(content={'users': users}, status_code=200)
+    except Exception as err:
+        return HTTPException(500, f'error: {err}')
+
+
 @app.get('/{user_login}',
          response_model=User,
          summary='Получение основной информации о пользователе'
@@ -68,22 +84,6 @@ async def get_user(user_login):
         return HTTPException(detail={'message': f"The user {user_login} doesn't exist"}, status_code=400)
     except:
         return HTTPException(detail={'message': "Internal Error"}, status_code=500)
-
-
-@app.get('/users')
-async def get_users():
-    try:
-        users = []
-
-        for user in database.collection('users').stream():
-            user_obj = user.to_dict()
-            user_model = BaseUserModel(**user_obj)
-
-            users.append(user_model.dict())
-
-        return JSONResponse(content={'users': users}, status_code=200)
-    except Exception as err:
-        return HTTPException(500, f'error: {err}')
 
 
 @app.post('/{user_login}/follow',
