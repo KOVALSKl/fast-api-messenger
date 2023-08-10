@@ -70,6 +70,22 @@ async def get_user(user_login):
         return HTTPException(detail={'message': "Internal Error"}, status_code=500)
 
 
+@app.get('/users')
+async def get_users():
+    try:
+        users = []
+
+        for user in database.collection('users').stream():
+            user_obj = user.to_dict()
+            user_model = User(**user_obj)
+
+            users.append(user_model.dict())
+
+        return JSONResponse(content={'users': users}, status_code=200)
+    except Exception as err:
+        return HTTPException(500, f'error: {err}')
+
+
 @app.post('/{user_login}/follow',
           response_model=Subscription,
           summary='Подписывается на конкретного пользователя'
