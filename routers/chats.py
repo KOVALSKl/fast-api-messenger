@@ -58,11 +58,11 @@ async def get_all_user_chats(request: Request):
 
 
 @router.get('/{chat_id}')
-async def get_user_chat(request: Request, chat_id: str):
+async def get_user_chat(request: Request, chat_name: str):
     """
     Получение конкретного чата/диалога пользователя по идентификатору чата
     :param request: Объект запроса
-    :param chat_id: Идентификатор чата
+    :param chat_name: Имя чата в коллекции пользователя
     :return:
     """
     try:
@@ -72,17 +72,30 @@ async def get_user_chat(request: Request, chat_id: str):
         if not user:
             return HTTPException(detail={'message': f"Пользователь не авторизован"}, status_code=401)
 
-        chat_ref = lib.root_collection_item_exist(database, 'chats', chat_id)
         user_ref = lib.root_collection_item_exist(database, 'users', user.login)
 
         if not user_ref:
             return HTTPException(detail={'message': f"Пользователь не существует"}, status_code=400)
 
+        chat_meta_ref = user_ref.collection('chats').document(chat_name)
+        chat_meta_doc = chat_meta_ref.get()
+
+        if not chat_meta_doc.exists:
+            return HTTPException(detail={'message': f"Чата {chat_name} не существует"}, status_code=404)
+
+        chat_meta_model = ChatMeta(**(chat_meta_doc.to_dict()))
+
+        chat_ref = lib.root_collection_item_exist(database, 'chats', chat_meta_model.chat_id)
+
         if not chat_ref:
-            return HTTPException(detail={'message': f"Чата {chat_id} не существует"}, status_code=404)
+            return HTTPException(detail={'message': f"Чата {chat_meta_model.chat_id} не существует"}, status_code=404)
 
         chat_dict = chat_ref.get().to_dict()
         chat_model = Chat(**chat_dict)
+
+        if user.login not in chat_model.members:
+            return HTTPException(detail={'message': f"Пользователь {user.login} не является участником чата"},
+                                 status_code=403)
 
         messages = []
 
@@ -94,13 +107,9 @@ async def get_user_chat(request: Request, chat_id: str):
 
         chat_dict.update({'messages': messages})
 
-        if user.login not in chat_model.members:
-            return HTTPException(detail={'message': f"Пользователь {user.login} не является участником чата"},
-                                 status_code=403)
-
         return JSONResponse(content=chat_dict, status_code=200)
-    except:
-        return HTTPException(detail={'message': "Internal Error"}, status_code=500)
+    except Exception as err:
+        return HTTPException(500, f'error: {err}')
 
 
 @router.post('/')
