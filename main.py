@@ -77,7 +77,7 @@ async def get_users():
 
         for user in database.collection('users').stream():
             user_obj = user.to_dict()
-            user_model = User(**user_obj)
+            user_model = BaseUserModel(**user_obj)
 
             users.append(user_model.dict())
 
