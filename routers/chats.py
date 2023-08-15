@@ -142,9 +142,12 @@ async def create_chat(request: Request, chat_request_model: ChatModelRequest):
         if not chat:
             return HTTPException(detail={'message': "Не удалось создать чат"}, status_code=500)
 
-        websocket_message = WebSocketMessage(
-            type=MessageType.UPDATE_CHATS,
-            content=chat
+        response_message = ResponseMessage(
+            message=WebSocketMessage(
+                type=MessageType.UPDATE_CHATS,
+                content=chat
+            ),
+            chat_id=chat.chat_id
         )
 
         for member in chat_members_login:
@@ -153,7 +156,7 @@ async def create_chat(request: Request, chat_request_model: ChatModelRequest):
 
             active_member = websocket_manager[member]
             if active_member:
-                await active_member.connection.send_json(websocket_message.dict())
+                await active_member.connection.send_json(response_message.dict())
 
         response = JSONResponse(content=chat.dict(), status_code=200)
         return response
