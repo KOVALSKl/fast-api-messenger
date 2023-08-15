@@ -151,9 +151,9 @@ async def create_chat(request: Request, chat_request_model: ChatModelRequest):
             if member == creator.login:
                 continue
 
-            member_connection = websocket_manager[member]
-            if member_connection:
-                member_connection.send_json(websocket_message.dict())
+            active_member = websocket_manager[member]
+            if active_member:
+                active_member.connection.send_json(websocket_message.dict())
 
         response = JSONResponse(content=chat.dict(), status_code=200)
         return response
