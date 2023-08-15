@@ -50,7 +50,6 @@ async def get_all_user_chats(request: Request):
         for chat in user_ref.collection('chats').stream():
             # подумай как изменить это
             chat_model = chat.to_dict()
-            chat_model.update({'chat_name': chat.id})
             user_chats.append(chat_model)
         return JSONResponse(content={'chats': user_chats}, status_code=200)
     except:
@@ -145,8 +144,6 @@ async def create_chat(request: Request, chat_request_model: ChatModelRequest):
 
         response = JSONResponse(content=chat.dict(), status_code=200)
         return response
-
-        # здесь нужен редирект в созданный чат
 
     except HTTPException as err:
         return err
