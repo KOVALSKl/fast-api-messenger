@@ -133,20 +133,25 @@ async def create_chat(request: Request, chat_request_model: ChatModelRequest):
 
         if len(chat_members_login) == 1:
             member_ref = lib.root_collection_item_exist(database, 'users', chat_request_model.members_login[0])
-            chat = lib.create_dialog(database, user_ref, member_ref)
+            chat, member_chat_meta = lib.create_dialog(database, user_ref, member_ref)
+            websocket_message = WebSocketMessage(
+                type=MessageType.UPDATE_CHATS,
+                content=member_chat_meta
+            )
         elif len(chat_members_login) > 1:
             chat_members_login.append(creator.login)
             chat = lib.create_chat(database, chat_members_login, chat_request_model.name)
+            websocket_message = WebSocketMessage(
+                type=MessageType.UPDATE_CHATS,
+                content=chat
+            )
         else:
             return HTTPException(detail={'message': f"Невозможно создать чат без участников"}, status_code=400)
         if not chat:
             return HTTPException(detail={'message': "Не удалось создать чат"}, status_code=500)
 
         response_message = ResponseMessage(
-            message=WebSocketMessage(
-                type=MessageType.UPDATE_CHATS,
-                content=chat
-            ),
+            message=websocket_message,
             chat_id=chat.chat_id
         )
 
