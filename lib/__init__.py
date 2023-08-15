@@ -104,13 +104,13 @@ def create_dialog(database, creator_ref, member_ref) -> Union[models.ChatMeta, N
             update_time, chat_ref = database.collection('chats').add(chat.dict())
 
             member_chat_meta = models.ChatMeta(
-                chat_name=f'{creator_model.name} {creator_model.surname}',
+                chat_name=f'{member_model.name} {member_model.surname}',
                 chat_id=chat_ref.id,
                 created_at=chat.created_at,
             )
 
             creator_chat_meta = models.ChatMeta(
-                chat_name=f'{member_model.name} {member_model.surname}',
+                chat_name=f'{creator_model.name} {creator_model.surname}',
                 chat_id=chat_ref.id,
                 created_at=chat.created_at
             )
