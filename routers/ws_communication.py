@@ -44,7 +44,7 @@ async def communication(websocket: WebSocket, auth_token):
     try:
         while True:
             message_obj = WebSocketMessage(**(await websocket.receive_json()))
-            if message_obj.type == MessageType.UPDATEUSERSTATUS:
+            if message_obj.type == MessageType.UPDATE_USER_STATUS:
                 if type(message_obj.content) == UserStatus:
                     chat_ref = lib.root_collection_item_exist(database, 'chats', message_obj.content.chat_id)
 

@@ -10,7 +10,8 @@ from database import DataBaseConnector
 
 class MessageType(IntEnum, Enum):
     MESSAGE = 0,
-    UPDATEUSERSTATUS = 1,
+    UPDATE_USER_STATUS = 1,
+    UPDATE_CHATS = 2,
 
 
 class Role(IntEnum, Enum):
@@ -109,7 +110,7 @@ class Endpoint:
 
 class WebSocketMessage(BaseModel):
     type: MessageType
-    content: Union[Message, UserStatus]
+    content: Union[Message, UserStatus, ChatMeta]
 
 
 class ResponseMessage(BaseModel):
