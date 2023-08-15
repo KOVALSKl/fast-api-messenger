@@ -117,7 +117,7 @@ def create_dialog(database, creator_ref, member_ref) -> Union[models.ChatMeta, N
             creator_chat_ref.set(creator_chat_meta.dict())
             member_chat_ref.set(member_chat_meta.dict())
     finally:
-        return creator_chat_meta
+        return member_chat_meta
 
 
 def create_chat(database, members, chat_name: str = uuid4()) -> Union[models.ChatMeta, None]:
