@@ -105,12 +105,11 @@ async def get_user_chat(request: Request, chat_id: str):
 
 
 @router.post('/')
-async def create_chat(request: Request, members_login: List[str], chat_name: str = ''):
+async def create_chat(request: Request, chat_request_model: ChatModelRequest):
     """
     Создает чат/диалог
+    :param chat_request_model: Модель данных для создания чата
     :param request: Объект запроса
-    :param members_login: Логины участников
-    :param chat_name: Название чата (не диалога)
     :return:
     """
 
@@ -126,7 +125,7 @@ async def create_chat(request: Request, members_login: List[str], chat_name: str
         if not user_ref:
             return HTTPException(detail={'message': f"Пользователь не существует"}, status_code=400)
 
-        chat_members_login = list(set(filter(lambda member: member != creator.login, members_login)))
+        chat_members_login = list(set(filter(lambda member: member != creator.login, chat_request_model.members_login)))
 
         for member in chat_members_login:
             member_ref = lib.root_collection_item_exist(database, 'users', member)
@@ -134,11 +133,11 @@ async def create_chat(request: Request, members_login: List[str], chat_name: str
                 return HTTPException(detail={'message': f"Пользователь {member} не существует"}, status_code=404)
 
         if len(chat_members_login) == 1:
-            member_ref = lib.root_collection_item_exist(database, 'users', members_login[0])
+            member_ref = lib.root_collection_item_exist(database, 'users', chat_request_model.members_login[0])
             chat = lib.create_dialog(database, user_ref, member_ref)
         elif len(chat_members_login) > 1:
             chat_members_login.append(creator.login)
-            chat = lib.create_chat(database, chat_members_login, chat_name)
+            chat = lib.create_chat(database, chat_members_login, chat_request_model.chat_name)
         else:
             return HTTPException(detail={'message': f"Невозможно создать чат без участников"}, status_code=400)
         if not chat:

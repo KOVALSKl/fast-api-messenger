@@ -85,6 +85,11 @@ class ChatMeta(BaseModel):
     created_at: str
 
 
+class ChatModelRequest(BaseModel):
+    members_login: List[str]
+    name: Union[str, None]
+
+
 class ChatModelResponse(Chat):
     messages: List[Message]
 

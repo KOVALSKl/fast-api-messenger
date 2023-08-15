@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, status
+from fastapi import FastAPI, Depends, status, Request
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,7 +11,7 @@ from config import Configuration
 from routers import posts, followers, following, chats, ws_communication
 from dependencies import authenticate_user, create_access_token, get_password_hash
 
-from lib import root_collection_item_exist
+from lib import root_collection_item_exist, get_token_from_request, get_user_from_token
 
 config = Configuration()
 config.read()
@@ -48,15 +48,19 @@ app.include_router(ws_communication.router)
 
 
 @app.get('/users')
-async def get_users():
+async def get_users(request: Request):
     try:
         users = []
 
-        for user in database.collection('users').stream():
-            user_obj = user.to_dict()
-            user_model = BaseUserModel(**user_obj)
+        token = get_token_from_request(request)
+        user_model = get_user_from_token(token)
 
-            users.append(user_model.dict())
+        for user in database.collection('users').stream():
+            if user_model.login != user.id:
+                user_obj = user.to_dict()
+                user_model = BaseUserModel(**user_obj)
+
+                users.append(user_model.dict())
 
         return JSONResponse(content={'users': users}, status_code=200)
     except Exception as err:
