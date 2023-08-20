@@ -68,6 +68,7 @@ async def communication(websocket: WebSocket, auth_token):
                         member_model = BaseUserModel(**member_doc_obj)
 
                         member_connection = websocket_manager[member_model.login]
+
                         if member_connection:
                             member_connection = member_connection.connection
 

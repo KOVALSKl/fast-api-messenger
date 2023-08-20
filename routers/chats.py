@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import HTTPException
+from google.cloud.firestore_v1 import FieldFilter
 
 import lib
 import json
@@ -90,11 +91,29 @@ async def get_user_chat(request: Request, chat_id: str):
 
         messages = []
 
-        for message_doc in chat_ref.collection('messages').stream():
+        messages_query = chat_ref.collection('messages').order_by('created_at')
+
+        for message_doc in messages_query.stream():
             message_obj = message_doc.to_dict()
             messages.append(message_obj)
 
-        messages.sort(key=lambda message: message['created_at'])
+        if not chat_model.chat_name:
+            user_ref_chats_meta_ref = user_ref.collection('chats')
+            user_ref_chats_meta = (
+                user_ref_chats_meta_ref
+                .where(filter=FieldFilter(
+                    'chat_id', '==', chat_id
+                ))
+                .stream()
+            )
+
+            chat_name = ''
+
+            for chat_meta in user_ref_chats_meta:
+                chat_meta_doc = chat_meta.to_dict()
+                chat_name = chat_meta_doc['chat_name']
+
+            chat_dict.update({'chat_name': chat_name})
 
         chat_dict.update({'messages': messages})
 

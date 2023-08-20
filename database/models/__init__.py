@@ -86,6 +86,10 @@ class ChatMeta(BaseModel):
     created_at: str
 
 
+class ChatMetaDataBase(ChatMeta):
+    unread: int = 0
+
+
 class ChatModelRequest(BaseModel):
     members_login: List[str]
     name: Union[str, None]
@@ -119,9 +123,14 @@ class ResponseMessage(BaseModel):
 
 
 class OpenedConnection:
+    chats_meta: Dict[str, ChatMetaDataBase] = {}
+
     def __init__(self, connection: WebSocket, user_status: Union[UserStatus, None] = None):
         self.connection = connection
         self.user_status = user_status
+
+    def get_chat_meta(self, chat_id: str):
+        return self.chats_meta[chat_id]
 
 
 class WebSocketManager:
